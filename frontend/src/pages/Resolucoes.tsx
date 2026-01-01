@@ -49,7 +49,9 @@ export default function Resolucoes() {
   const [newRes, setNewRes] = useState({ title: '', description: '', targetDate: '' })
   const [editingId, setEditingId] = useState<number | null>(null)
 
-  const getDateColorClass = (dateString: string) => {
+  const getDateColorClass = (dateString: string, status: string) => {
+    if (status === 'completed') return 'text-green-500'
+
     const target = new Date(dateString)
     const now = new Date()
     const diffTime = target.getTime() - now.getTime()
@@ -276,10 +278,10 @@ export default function Resolucoes() {
 
               <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-800/50">
                 <div className="flex items-center gap-2 text-sm">
-                  <svg className={`w-4 h-4 ${getDateColorClass(res.targetDate)}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`w-4 h-4 ${getDateColorClass(res.targetDate, res.status)}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  <span className={getDateColorClass(res.targetDate)}>
+                  <span className={getDateColorClass(res.targetDate, res.status)}>
                     Meta: {new Date(res.targetDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}
                   </span>
                 </div>
