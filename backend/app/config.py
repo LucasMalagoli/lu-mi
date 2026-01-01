@@ -1,9 +1,10 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     app_name: str = "proj-lu-mi-backend"
-    database_url: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/app_db"
+    database_url: str = Field(validation_alias="ASYNC_DATABASE_URL")
 
     class Config:
         env_file = ".env"
