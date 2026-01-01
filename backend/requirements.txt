@@ -1,4 +1,9 @@
 fastapi==0.111.0
 uvicorn[standard]==0.30.1
-redis==5.0.7
+sqlmodel
+sqlalchemy
+asyncpg
 pydantic-settings==2.3.4
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt<4.0
