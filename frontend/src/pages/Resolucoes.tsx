@@ -20,6 +20,9 @@ export default function Resolucoes() {
   
   const [resolutions, setResolutions] = useState<Resolution[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [togglingId, setTogglingId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchResolutions()
@@ -71,6 +74,8 @@ export default function Resolucoes() {
       return
     }
 
+    setIsSaving(true)
+
     const token = localStorage.getItem("access_token")
     const headers = {
       "Content-Type": "application/json",
@@ -119,11 +124,14 @@ export default function Resolucoes() {
       setIsModalOpen(false)
     } catch (error) {
       notify("Erro ao salvar resolução", "error")
+    } finally {
+      setIsSaving(false)
     }
   }
 
   const handleDeleteResolution = async () => {
     if (deletingId) {
+      setIsDeleting(true)
       try {
         const token = localStorage.getItem("access_token")
         const res = await fetch(`${config.API_URL}/resolutions/${deletingId}`, {
@@ -140,6 +148,8 @@ export default function Resolucoes() {
         setDeletingId(null)
       } catch (error) {
         notify("Erro ao remover resolução", "error")
+      } finally {
+        setIsDeleting(false)
       }
     }
   }
@@ -149,6 +159,7 @@ export default function Resolucoes() {
     if (!resolution) return
     const newStatus = resolution.status === 'pending' ? 'completed' : 'pending'
 
+    setTogglingId(id)
     try {
       const token = localStorage.getItem("access_token")
       const res = await fetch(`${config.API_URL}/resolutions/${id}`, {
@@ -166,6 +177,8 @@ export default function Resolucoes() {
       notify("Status alterado com sucesso!", "success")
     } catch (error) {
       notify("Erro ao alterar status", "error")
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -272,16 +285,21 @@ export default function Resolucoes() {
                 </div>
                 <button
                   onClick={() => toggleStatus(res.id)}
+                  disabled={togglingId === res.id}
                   className={`p-2 rounded-full transition-colors ${
                     res.status === 'completed' 
                       ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30' 
                       : 'bg-slate-800 text-slate-400 hover:bg-blue-500/20 hover:text-blue-400'
-                  }`}
+                  } ${togglingId === res.id ? 'opacity-50 cursor-not-allowed' : ''}`}
                   title={res.status === 'completed' ? "Reabrir" : "Concluir"}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                  {togglingId === res.id ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current"></div>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
                 </button>
               </div>
             </div>
@@ -338,9 +356,14 @@ export default function Resolucoes() {
                   </button>
                   <button
                     type="submit"
-                    className="cursor-pointer flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium"
+                    disabled={isSaving}
+                    className={`cursor-pointer flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium flex justify-center items-center ${isSaving ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
-                    Salvar
+                    {isSaving ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    ) : (
+                      "Salvar"
+                    )}
                   </button>
                 </div>
               </form>
@@ -363,9 +386,14 @@ export default function Resolucoes() {
                 </button>
                 <button
                   onClick={handleDeleteResolution}
-                  className="cursor-pointer flex-1 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors font-medium"
+                  disabled={isDeleting}
+                  className={`cursor-pointer flex-1 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors font-medium flex justify-center items-center ${isDeleting ? 'opacity-70 cursor-not-allowed' : ''}`}
                 >
-                  Excluir
+                  {isDeleting ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  ) : (
+                    "Excluir"
+                  )}
                 </button>
               </div>
             </div>
