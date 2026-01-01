@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useNotify } from '../context/NotificationContext'
+import { config } from '../config'
 
 export default function Register() {
   const [username, setUsername] = useState('')
@@ -12,7 +13,7 @@ export default function Register() {
     e.preventDefault()
 
     try {
-      const res = await fetch("http://localhost:8000/register", {
+      const res = await fetch(`${config.API_URL}/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
