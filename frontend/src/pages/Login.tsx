@@ -31,10 +31,10 @@ export default function Login() {
       localStorage.setItem("access_token", data.access_token)
       localStorage.setItem("username", data.user.username)
       localStorage.setItem("user_id", data.user.id)
-      notify("Login successful", "success")
+      notify("Login realizado com sucesso!", "success")
       navigate("/")
     } catch (error) {
-      notify("Login failed. Please check your credentials.", "error")
+      notify("Falha no login. Verifique suas credenciais.", "error")
     } finally {
       setIsLoading(false)
     }
@@ -86,15 +86,15 @@ export default function Login() {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             ) : (
-              "Sign in"
+              "Entrar"
             )}
           </button>
         </form>
 
         <p className="text-sm text-gray-400 text-center mt-6">
-          Don’t have an account?{' '}
+          Não tem uma conta?{' '}
           <Link to="/register" className="text-red-500 hover:underline">
-            Sign up
+            Cadastre-se
           </Link>
         </p>
       </div>
