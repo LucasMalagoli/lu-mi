@@ -2,10 +2,11 @@ import { useNavigate } from "react-router-dom"
 
 export default function Home() {
   const navigate = useNavigate()
-  const username = "Lucas" // TODO: Mocked
+  const username = localStorage.getItem("username") || "User"
 
   const handleLogout = () => {
     localStorage.removeItem("access_token")
+    localStorage.removeItem("username")
     navigate("/login")
   }
 

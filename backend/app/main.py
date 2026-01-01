@@ -44,7 +44,7 @@ async def login(form: OAuth2PasswordRequestForm = Depends(), session: AsyncSessi
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_access_token({"sub": user.username})
-    return {"access_token": token, "token_type": "bearer"}
+    return {"access_token": token, "token_type": "bearer", "username": user.username}
 
 
 class RegisterRequest(BaseModel):
