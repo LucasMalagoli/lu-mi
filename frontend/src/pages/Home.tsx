@@ -40,9 +40,9 @@ export default function Home() {
         <header className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl md:text-5xl font-bold text-white mb-2">
-              Hi, <span className="text-blue-500">{username}</span>
+              Olá, <span className="text-blue-500">{username}</span>
             </h1>
-            <p className="text-slate-400 text-lg">What would you like to do today?</p>
+            <p className="text-slate-400 text-lg">O que temos pra hoje?</p>
           </div>
           <button
             onClick={handleLogout}
