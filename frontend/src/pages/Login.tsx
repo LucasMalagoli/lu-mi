@@ -27,7 +27,8 @@ export default function Login() {
 
       const data = await res.json()
       localStorage.setItem("access_token", data.access_token)
-      localStorage.setItem("username", data.username)
+      localStorage.setItem("username", data.user.username)
+      localStorage.setItem("user_id", data.user.id)
       notify("Login successful", "success")
       navigate("/")
     } catch (error) {

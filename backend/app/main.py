@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -10,7 +11,7 @@ from sqlmodel import select
 from pydantic import BaseModel
 
 from app.auth import authenticate_user, create_access_token, SECRET_KEY, ALGORITHM
-from .models import User
+from .models import User, Resolution, ResolutionCreate, ResolutionUpdate
 from .database import init_db, get_session
 
 logging.basicConfig(level=logging.INFO)
@@ -44,7 +45,9 @@ async def login(form: OAuth2PasswordRequestForm = Depends(), session: AsyncSessi
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_access_token({"sub": user.username})
-    return {"access_token": token, "token_type": "bearer", "username": user.username}
+    user_dict = user.model_dump()
+    user_dict.pop("password")
+    return {"access_token": token, "token_type": "bearer", "user": user_dict}
 
 
 class RegisterRequest(BaseModel):
@@ -88,3 +91,104 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
 @app.get("/me")
 def read_me(user: str = Depends(get_current_user)):
     return {"username": user}
+
+
+async def get_current_user_obj(
+    username: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> User:
+    statement = select(User).where(User.username == username)
+    result = await session.execute(statement)
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+@app.post("/resolutions", response_model=Resolution, status_code=201)
+async def create_resolution(
+    resolution_data: ResolutionCreate,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    new_resolution = Resolution(
+        title=resolution_data.title,
+        description=resolution_data.description,
+        target_date=resolution_data.target_date,
+        user_id=user.id,
+    )
+    session.add(new_resolution)
+    await session.commit()
+    await session.refresh(new_resolution)
+    return new_resolution
+
+
+@app.get("/resolutions", response_model=list[Resolution])
+async def get_resolutions(
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(Resolution).where(Resolution.user_id == user.id)
+    result = await session.execute(statement)
+    return result.scalars().all()
+
+
+@app.get("/resolutions/{resolution_id}", response_model=Resolution)
+async def get_resolution(
+    resolution_id: int,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(Resolution).where(
+        Resolution.id == resolution_id, Resolution.user_id == user.id
+    )
+    result = await session.execute(statement)
+    resolution = result.scalars().first()
+    if not resolution:
+        raise HTTPException(status_code=404, detail="Resolution not found")
+    return resolution
+
+
+@app.patch("/resolutions/{resolution_id}", response_model=Resolution)
+async def update_resolution(
+    resolution_id: int,
+    resolution_update: ResolutionUpdate,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(Resolution).where(
+        Resolution.id == resolution_id, Resolution.user_id == user.id
+    )
+    result = await session.execute(statement)
+    resolution = result.scalars().first()
+    if not resolution:
+        raise HTTPException(status_code=404, detail="Resolution not found")
+
+    resolution_data = resolution_update.model_dump(exclude_unset=True)
+    for key, value in resolution_data.items():
+        setattr(resolution, key, value)
+
+    resolution.updated_at = datetime.now()
+    session.add(resolution)
+    await session.commit()
+    await session.refresh(resolution)
+    return resolution
+
+
+@app.delete("/resolutions/{resolution_id}")
+async def delete_resolution(
+    resolution_id: int,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(Resolution).where(
+        Resolution.id == resolution_id, Resolution.user_id == user.id
+    )
+    result = await session.execute(statement)
+    resolution = result.scalars().first()
+    if not resolution:
+        raise HTTPException(status_code=404, detail="Resolution not found")
+
+    await session.delete(resolution)
+    await session.commit()
+    return {"message": "Resolution deleted successfully"}

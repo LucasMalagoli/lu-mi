@@ -2,8 +2,8 @@ import { createBrowserRouter } from 'react-router-dom'
 import Home from '../pages/Home'
 import Login from '../pages/Login'
 import Register from '../pages/Register'
-import Analytics from '../pages/Analytics'
-import Projects from '../pages/Projects'
+import Resolucoes from '../pages/Resolucoes'
+// import Projects from '../pages/Projects'
 import Settings from '../pages/Settings'
 import AppLayout from '../components/layout/AppLayout'
 import ProtectedRoute from '../routes/ProtectedRoute'
@@ -19,9 +19,9 @@ export const router = createBrowserRouter([
         element: <ProtectedRoute />,
         children: [
           { path: '/', element: <Home /> },
-          { path: '/analytics', element: <Analytics /> },
-          { path: '/projects', element: <Projects /> },
-          { path: '/settings', element: <Settings /> },
+          { path: '/resolucoes', element: <Resolucoes /> },
+          // { path: '/projects', element: <Projects /> },
+          { path: '/configuracoes', element: <Settings /> },
         ],
       },
     ],
