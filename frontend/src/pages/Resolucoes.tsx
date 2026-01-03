@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useNotify } from '../context/NotificationContext'
 import { config } from '../config'
+import ScrollToTopButton from '../components/ScrollToTopButton'
 
 interface Resolution {
   id: number
@@ -401,6 +402,7 @@ export default function Resolucoes() {
             </div>
           </div>
         )}
+        <ScrollToTopButton />
       </div>
     </div>
   )

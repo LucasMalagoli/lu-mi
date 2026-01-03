@@ -11,7 +11,11 @@ from sqlmodel import select
 from pydantic import BaseModel
 
 from app.auth import authenticate_user, create_access_token, SECRET_KEY, ALGORITHM
-from .models import User, Resolution, ResolutionCreate, ResolutionUpdate
+from .models import (
+    User, Resolution, ResolutionCreate, ResolutionUpdate,
+    FinancialRecord, FinancialRecordCreate, FinancialRecordUpdate,
+    Category, TransactionType
+)
 from .database import init_db, get_session
 
 logging.basicConfig(level=logging.INFO)
@@ -192,3 +196,140 @@ async def delete_resolution(
     await session.delete(resolution)
     await session.commit()
     return {"message": "Resolution deleted successfully"}
+
+
+@app.post("/financial-records", response_model=FinancialRecord, status_code=201)
+async def create_financial_record(
+    record_data: FinancialRecordCreate,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    # Find or create category
+    statement = select(Category).where(Category.name == record_data.category_name, Category.user_id == user.id)
+    result = await session.execute(statement)
+    category = result.scalars().first()
+    
+    if not category:
+        category = Category(name=record_data.category_name, user_id=user.id)
+        session.add(category)
+        await session.commit()
+        await session.refresh(category)
+    
+    new_record = FinancialRecord(
+        title=record_data.title,
+        description=record_data.description,
+        value=record_data.value,
+        type=record_data.type,
+        bill_date=record_data.bill_date,
+        category_id=category.id,
+        user_id=user.id
+    )
+    session.add(new_record)
+    await session.commit()
+    await session.refresh(new_record)
+    return new_record
+
+
+@app.get("/financial-records", response_model=list[FinancialRecord])
+async def get_financial_records(
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(FinancialRecord).where(FinancialRecord.user_id == user.id)
+    result = await session.execute(statement)
+    return result.scalars().all()
+
+
+@app.delete("/financial-records/{record_id}")
+async def delete_financial_record(
+    record_id: int,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(FinancialRecord).where(FinancialRecord.id == record_id, FinancialRecord.user_id == user.id)
+    result = await session.execute(statement)
+    record = result.scalars().first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    await session.delete(record)
+    await session.commit()
+    return {"message": "Record deleted successfully"}
+
+
+@app.patch("/financial-records/{record_id}", response_model=FinancialRecord)
+async def update_financial_record(
+    record_id: int,
+    record_update: FinancialRecordUpdate,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(FinancialRecord).where(FinancialRecord.id == record_id, FinancialRecord.user_id == user.id)
+    result = await session.execute(statement)
+    record = result.scalars().first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    update_data = record_update.model_dump(exclude_unset=True)
+    
+    # Handle category update if name is provided
+    if "category_name" in update_data:
+        category_name = update_data.pop("category_name")
+        if category_name:
+            # Find or create category
+            cat_stmt = select(Category).where(Category.name == category_name, Category.user_id == user.id)
+            cat_result = await session.execute(cat_stmt)
+            category = cat_result.scalars().first()
+            
+            if not category:
+                category = Category(name=category_name, user_id=user.id)
+                session.add(category)
+                await session.commit()
+                await session.refresh(category)
+            
+            record.category_id = category.id
+
+    for key, value in update_data.items():
+        setattr(record, key, value)
+
+    record.updated_at = datetime.now()
+    session.add(record)
+    await session.commit()
+    await session.refresh(record)
+    return record
+
+
+@app.get("/categories", response_model=list[Category])
+async def get_categories(
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(Category).where(Category.user_id == user.id)
+    result = await session.execute(statement)
+    return result.scalars().all()
+
+
+@app.delete("/categories/{category_id}")
+async def delete_category(
+    category_id: int,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(Category).where(Category.id == category_id, Category.user_id == user.id)
+    result = await session.execute(statement)
+    category = result.scalars().first()
+    
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    records_stmt = select(FinancialRecord).where(FinancialRecord.category_id == category_id)
+    records_result = await session.execute(records_stmt)
+    records = records_result.scalars().all()
+    
+    for record in records:
+        record.category_id = None
+        session.add(record)
+    
+    await session.delete(category)
+    await session.commit()
+    return {"message": "Category deleted successfully"}
