@@ -705,9 +705,9 @@ export default function PlanejamentoFinanceiro() {
               <button 
                 onClick={() => setIsMonthModalOpen(true)}
                 className="w-full md:w-auto px-2 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors"
-                title="Selecionar Mês"
+                title="Selecionar Período"
               >
-                Selecionar Mês
+                Selecionar Período
               </button>
             </div>
           </div>
