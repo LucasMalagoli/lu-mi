@@ -5,13 +5,14 @@ from email.message import EmailMessage
 from datetime import datetime, date
 from typing import Optional
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from jose import jwt, JWTError
 from contextlib import asynccontextmanager
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlmodel import select, func, or_, desc, asc, case
 from pydantic import BaseModel
 
@@ -19,7 +20,8 @@ from app.auth import authenticate_user, create_access_token, SECRET_KEY, ALGORIT
 from .models import (
     User, Resolution, ResolutionCreate, ResolutionUpdate,
     FinancialRecord, FinancialRecordCreate, FinancialRecordUpdate,
-    Category, TransactionType
+    FinancialRecordRead, Category, CategoryRead, TransactionType,
+    FinancialRecordStatus
 )
 from .database import init_db, get_session, engine
 
@@ -262,22 +264,24 @@ async def delete_resolution(
     return {"message": "Resolution deleted successfully"}
 
 
-@app.post("/financial-records", response_model=FinancialRecord, status_code=201)
+@app.post("/financial-records", response_model=FinancialRecordRead, status_code=201)
 async def create_financial_record(
     record_data: FinancialRecordCreate,
     user: User = Depends(get_current_user_obj),
     session: AsyncSession = Depends(get_session),
 ):
-    # Find or create category
-    statement = select(Category).where(Category.name == record_data.category_name, Category.user_id == user.id)
-    result = await session.execute(statement)
-    category = result.scalars().first()
-    
-    if not category:
-        category = Category(name=record_data.category_name, user_id=user.id)
-        session.add(category)
-        await session.commit()
-        await session.refresh(category)
+    categories = []
+    for cat_name in record_data.category_names:
+        statement = select(Category).where(Category.name == cat_name, Category.user_id == user.id)
+        result = await session.execute(statement)
+        category = result.scalars().first()
+        
+        if not category:
+            category = Category(name=cat_name, user_id=user.id)
+            session.add(category)
+            await session.commit()
+            await session.refresh(category)
+        categories.append(category)
     
     new_record = FinancialRecord(
         title=record_data.title,
@@ -285,17 +289,22 @@ async def create_financial_record(
         value=record_data.value,
         type=record_data.type,
         bill_date=record_data.bill_date,
-        category_id=category.id,
-        user_id=user.id
+        status=record_data.status,
+        user_id=user.id,
+        categories=categories
     )
     session.add(new_record)
     await session.commit()
     await session.refresh(new_record)
-    return new_record
+    
+    # Re-fetch to ensure relationships are loaded for response
+    stmt = select(FinancialRecord).where(FinancialRecord.id == new_record.id).options(selectinload(FinancialRecord.categories))
+    result = await session.execute(stmt)
+    return result.scalars().first()
 
 
 class FinancialRecordsResponse(BaseModel):
-    items: list[FinancialRecord]
+    items: list[FinancialRecordRead]
     total: int
     total_income: float
     total_expense: float
@@ -308,7 +317,7 @@ async def get_financial_records(
     skip: int = 0,
     limit: int = 100,
     type: Optional[TransactionType] = None,
-    category_id: Optional[int] = None,
+    category_ids: Optional[list[int]] = Query(None, alias="category_ids"),
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     search: Optional[str] = None,
@@ -319,8 +328,8 @@ async def get_financial_records(
     # Filters
     if type:
         query = query.where(FinancialRecord.type == type)
-    if category_id:
-        query = query.where(FinancialRecord.category_id == category_id)
+    if category_ids:
+        query = query.where(FinancialRecord.categories.any(Category.id.in_(category_ids)))
     if start_date:
         query = query.where(FinancialRecord.bill_date >= start_date)
     if end_date:
@@ -363,6 +372,9 @@ async def get_financial_records(
     # Pagination
     query = query.offset(skip).limit(limit)
     
+    # Eager load categories
+    query = query.options(selectinload(FinancialRecord.categories))
+    
     result = await session.execute(query)
     items = result.scalars().all()
 
@@ -391,14 +403,14 @@ async def delete_financial_record(
     return {"message": "Record deleted successfully"}
 
 
-@app.patch("/financial-records/{record_id}", response_model=FinancialRecord)
+@app.patch("/financial-records/{record_id}", response_model=FinancialRecordRead)
 async def update_financial_record(
     record_id: int,
     record_update: FinancialRecordUpdate,
     user: User = Depends(get_current_user_obj),
     session: AsyncSession = Depends(get_session),
 ):
-    statement = select(FinancialRecord).where(FinancialRecord.id == record_id, FinancialRecord.user_id == user.id)
+    statement = select(FinancialRecord).where(FinancialRecord.id == record_id, FinancialRecord.user_id == user.id).options(selectinload(FinancialRecord.categories))
     result = await session.execute(statement)
     record = result.scalars().first()
     if not record:
@@ -406,22 +418,22 @@ async def update_financial_record(
 
     update_data = record_update.model_dump(exclude_unset=True)
     
-    # Handle category update if name is provided
-    if "category_name" in update_data:
-        category_name = update_data.pop("category_name")
-        if category_name:
-            # Find or create category
-            cat_stmt = select(Category).where(Category.name == category_name, Category.user_id == user.id)
-            cat_result = await session.execute(cat_stmt)
-            category = cat_result.scalars().first()
-            
-            if not category:
-                category = Category(name=category_name, user_id=user.id)
-                session.add(category)
-                await session.commit()
-                await session.refresh(category)
-            
-            record.category_id = category.id
+    if "category_names" in update_data:
+        cat_names = update_data.pop("category_names")
+        new_categories = []
+        if cat_names is not None:
+            for cat_name in cat_names:
+                cat_stmt = select(Category).where(Category.name == cat_name, Category.user_id == user.id)
+                cat_result = await session.execute(cat_stmt)
+                category = cat_result.scalars().first()
+                
+                if not category:
+                    category = Category(name=cat_name, user_id=user.id)
+                    session.add(category)
+                    await session.commit()
+                    await session.refresh(category)
+                new_categories.append(category)
+            record.categories = new_categories
 
     for key, value in update_data.items():
         setattr(record, key, value)
@@ -433,7 +445,7 @@ async def update_financial_record(
     return record
 
 
-@app.get("/categories", response_model=list[Category])
+@app.get("/categories", response_model=list[CategoryRead])
 async def get_categories(
     user: User = Depends(get_current_user_obj),
     session: AsyncSession = Depends(get_session),
@@ -456,13 +468,11 @@ async def delete_category(
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
 
-    records_stmt = select(FinancialRecord).where(FinancialRecord.category_id == category_id)
-    records_result = await session.execute(records_stmt)
-    records = records_result.scalars().all()
-    
-    for record in records:
-        record.category_id = None
-        session.add(record)
+    # Remove category from all records (M2M link)
+    # We need to fetch records that have this category and remove it from their list
+    # However, deleting the category should cascade to the link table if configured, 
+    # or we can rely on SQLModel/SQLAlchemy default behavior for M2M deletion.
+    # Since we are deleting the Category object, the links in FinancialRecordCategoryLink should be removed.
     
     await session.delete(category)
     await session.commit()

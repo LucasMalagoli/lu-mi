@@ -1,7 +1,8 @@
 from datetime import datetime, date
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Relationship
+from sqlalchemy import UniqueConstraint
 
 
 class User(SQLModel, table=True):
@@ -10,6 +11,16 @@ class User(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.now)
     username: str = Field(index=True, unique=True)
     password: str
+
+
+class FinancialRecordCategoryLink(SQLModel, table=True):
+    financial_record_id: Optional[int] = Field(default=None, foreign_key="financialrecord.id", primary_key=True)
+    category_id: Optional[int] = Field(default=None, foreign_key="category.id", primary_key=True)
+
+
+class FinancialRecordStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
 
 
 class ResolutionStatus(str, Enum):
@@ -23,9 +34,18 @@ class TransactionType(str, Enum):
 
 
 class Category(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("name", "user_id", name="unique_category_user"),)
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    
+    records: List["FinancialRecord"] = Relationship(back_populates="categories", link_model=FinancialRecordCategoryLink)
+
+
+class CategoryRead(SQLModel):
+    id: int
+    name: str
+    user_id: int
 
 
 class FinancialRecord(SQLModel, table=True):
@@ -37,8 +57,23 @@ class FinancialRecord(SQLModel, table=True):
     value: float
     type: TransactionType
     bill_date: date
-    category_id: Optional[int] = Field(default=None, foreign_key="category.id")
+    status: FinancialRecordStatus = Field(default=FinancialRecordStatus.PENDING)
+    categories: List[Category] = Relationship(back_populates="records", link_model=FinancialRecordCategoryLink)
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
+
+
+class FinancialRecordRead(SQLModel):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    title: str
+    description: Optional[str]
+    value: float
+    type: TransactionType
+    bill_date: date
+    status: FinancialRecordStatus
+    categories: List[CategoryRead]
+    user_id: int
 
 
 class Resolution(SQLModel, table=True):
@@ -65,7 +100,8 @@ class FinancialRecordCreate(SQLModel):
     value: float
     type: TransactionType
     bill_date: date = Field(alias="billDate")
-    category_name: str = Field(alias="categoryName")
+    category_names: List[str] = Field(default_factory=list, alias="categoryNames")
+    status: FinancialRecordStatus = Field(default=FinancialRecordStatus.PENDING)
 
 
 class FinancialRecordUpdate(SQLModel):
@@ -74,7 +110,8 @@ class FinancialRecordUpdate(SQLModel):
     value: Optional[float] = None
     type: Optional[TransactionType] = None
     bill_date: Optional[date] = Field(default=None, alias="billDate")
-    category_name: Optional[str] = Field(default=None, alias="categoryName")
+    category_names: Optional[List[str]] = Field(default=None, alias="categoryNames")
+    status: Optional[FinancialRecordStatus] = None
 
 class ResolutionUpdate(SQLModel):
     title: Optional[str] = None

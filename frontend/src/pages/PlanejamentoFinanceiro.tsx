@@ -11,7 +11,8 @@ interface FinancialRecord {
   value: number
   type: 'income' | 'expense'
   bill_date: string
-  category_id: number
+  status: 'pending' | 'completed'
+  categories: Category[]
   created_at: string
 }
 
@@ -209,7 +210,7 @@ export default function PlanejamentoFinanceiro() {
   // Filters
   const [sortBy, setSortBy] = useState<'billDate' | 'value' | 'created'>(initialFilters.sortBy as any)
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>(initialFilters.typeFilter as any)
-  const [categoryFilter, setCategoryFilter] = useState<string>(initialFilters.categoryFilter)
+  const [categoryFilter, setCategoryFilter] = useState<string[]>(Array.isArray(initialFilters.categoryFilter) ? initialFilters.categoryFilter : [])
   const [dateRange, setDateRange] = useState(initialFilters.dateRange)
   const [searchTerm, setSearchTerm] = useState(initialFilters.searchTerm || '')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(initialFilters.searchTerm || '')
@@ -227,11 +228,12 @@ export default function PlanejamentoFinanceiro() {
     value: '',
     type: 'expense' as 'income' | 'expense',
     billDate: '',
-    categorySelection: '',
-    newCategoryName: '',
+    selectedCategories: [] as string[],
+    status: 'pending' as 'pending' | 'completed',
     isInstallment: false,
     installments: 2
   })
+  const [newCategoryInput, setNewCategoryInput] = useState('')
 
   useEffect(() => {
     Promise.all([fetchRecords(), fetchCategories()])
@@ -269,7 +271,9 @@ export default function PlanejamentoFinanceiro() {
       })
 
       if (typeFilter !== 'all') params.append('type', typeFilter)
-      if (categoryFilter !== 'all') params.append('category_id', categoryFilter)
+      if (categoryFilter.length > 0) {
+        categoryFilter.forEach(id => params.append('category_ids', id))
+      }
       if (dateRange.start) params.append('start_date', dateRange.start)
       if (dateRange.end) params.append('end_date', dateRange.end)
       if (debouncedSearchTerm) params.append('search', debouncedSearchTerm)
@@ -280,7 +284,7 @@ export default function PlanejamentoFinanceiro() {
       if (!res.ok) throw new Error("Failed to fetch")
       const data = await res.json()
       
-      setRecords(data.items)
+      setRecords(Array.isArray(data.items) ? data.items : [])
       setTotalRecords(data.total)
       setServerTotals({
         income: data.total_income,
@@ -301,7 +305,7 @@ export default function PlanejamentoFinanceiro() {
       })
       if (!res.ok) throw new Error("Failed to fetch categories")
       const data = await res.json()
-      setCategories(data)
+      setCategories(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error(error)
     }
@@ -310,18 +314,18 @@ export default function PlanejamentoFinanceiro() {
   const handleOpenModal = (record?: FinancialRecord) => {
     if (record) {
       setEditingId(record.id)
-      const cat = categories.find(c => c.id === record.category_id)
       setFormData({
         title: record.title,
         description: record.description ? record.description : '',
         value: record.value.toString(),
         type: record.type,
         billDate: record.bill_date,
-        categorySelection: cat ? cat.name : '__NEW__',
-        newCategoryName: '',
+        selectedCategories: record.categories.map(c => c.name),
+        status: record.status,
         isInstallment: false,
         installments: 2
       })
+      setNewCategoryInput('')
     } else {
       setEditingId(null)
       setFormData({
@@ -330,29 +334,30 @@ export default function PlanejamentoFinanceiro() {
         value: '',
         type: 'expense',
         billDate: '',
-        categorySelection: '',
-        newCategoryName: '',
+        selectedCategories: [],
+        status: 'pending',
         isInstallment: false,
         installments: 2
       })
+      setNewCategoryInput('')
     }
     setIsModalOpen(true)
   }
 
   const handleDuplicate = (record: FinancialRecord) => {
     setEditingId(null)
-    const cat = categories.find(c => c.id === record.category_id)
     setFormData({
       title: record.title,
       description: record.description ? record.description : '',
       value: record.value.toString(),
       type: record.type,
       billDate: '',
-      categorySelection: cat ? cat.name : '__NEW__',
-      newCategoryName: '',
+      selectedCategories: record.categories.map(c => c.name),
+      status: 'pending',
       isInstallment: false,
       installments: 2
     })
+    setNewCategoryInput('')
     setIsModalOpen(true)
   }
 
@@ -360,11 +365,7 @@ export default function PlanejamentoFinanceiro() {
     e.preventDefault()
     setIsSaving(true)
 
-    const categoryName = formData.categorySelection === '__NEW__' 
-      ? formData.newCategoryName 
-      : formData.categorySelection
-
-    if (!categoryName) {
+    if (formData.selectedCategories.length === 0) {
       notify("Selecione ou crie uma categoria", "error")
       setIsSaving(false)
       return
@@ -398,7 +399,8 @@ export default function PlanejamentoFinanceiro() {
               value: parseFloat(formData.value),
               type: formData.type,
               billDate: billDate,
-              categoryName: categoryName
+              categoryNames: formData.selectedCategories,
+              status: formData.status
             })
           }))
         }
@@ -428,7 +430,8 @@ export default function PlanejamentoFinanceiro() {
             value: parseFloat(formData.value),
             type: formData.type,
             billDate: formData.billDate,
-            categoryName: categoryName
+            categoryNames: formData.selectedCategories,
+            status: formData.status
           })
         })
 
@@ -477,10 +480,6 @@ export default function PlanejamentoFinanceiro() {
     }
   }
 
-  const handleDeleteCategoryClick = (id: number) => {
-    setDeletingCategoryId(id)
-    setIsDeleteCategoryModalOpen(true)
-  }
 
   const confirmDeleteCategory = async () => {
     if (!deletingCategoryId) return
@@ -496,13 +495,13 @@ export default function PlanejamentoFinanceiro() {
       
       setCategories(categories.filter(c => c.id !== deletingCategoryId))
       
-      if (categoryFilter === deletingCategoryId.toString()) {
-        setCategoryFilter('all')
+      if (Array.isArray(categoryFilter) && categoryFilter.includes(deletingCategoryId.toString())) {
+        setCategoryFilter(categoryFilter.filter(id => id !== deletingCategoryId.toString()))
       }
       
       const deletedCatName = categories.find(c => c.id === deletingCategoryId)?.name
-      if (deletedCatName && formData.categorySelection === deletedCatName) {
-        setFormData({ ...formData, categorySelection: '' })
+      if (deletedCatName && formData.selectedCategories.includes(deletedCatName)) {
+        setFormData({ ...formData, selectedCategories: formData.selectedCategories.filter(n => n !== deletedCatName) })
       }
 
       fetchRecords()
@@ -541,7 +540,7 @@ export default function PlanejamentoFinanceiro() {
   const handleClearFilters = () => {
     setSortBy('billDate')
     setTypeFilter('all')
-    setCategoryFilter('all')
+    setCategoryFilter([])
     setDateRange(getCurrentMonthRange())
     setSearchTerm('')
     setDebouncedSearchTerm('')
@@ -557,7 +556,87 @@ export default function PlanejamentoFinanceiro() {
     if (!areValuesVisible) return 'R$ ****'
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
   }
-  const getCategoryName = (id: number) => categories.find(c => c.id === id)?.name || 'Desconhecida'
+
+  const toggleCategoryFilter = (catId: string) => {
+    if (Array.isArray(categoryFilter) && categoryFilter.includes(catId)) {
+      setCategoryFilter(categoryFilter.filter(id => id !== catId))
+    } else {
+      const current = Array.isArray(categoryFilter) ? categoryFilter : []
+      setCategoryFilter([...current, catId])
+    }
+  }
+
+  const toggleRecordStatus = async (record: FinancialRecord) => {
+    const newStatus = record.status === 'pending' ? 'completed' : 'pending'
+    try {
+      const token = localStorage.getItem("access_token")
+      const res = await fetch(`${config.API_URL}/financial-records/${record.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      })
+      if (!res.ok) throw new Error("Failed to update status")
+      const updated = await res.json()
+      setRecords(records.map(r => r.id === record.id ? updated : r))
+    } catch (e) {
+      notify("Erro ao atualizar status", "error")
+    }
+  }
+
+  const removeCategoryFromRecord = async (record: FinancialRecord, catName: string) => {
+    const newCategories = record.categories?.filter(c => c.name !== catName).map(c => c.name) || []
+    try {
+      const token = localStorage.getItem("access_token")
+      const res = await fetch(`${config.API_URL}/financial-records/${record.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ categoryNames: newCategories })
+      })
+      if (!res.ok) throw new Error("Failed to update categories")
+      const updated = await res.json()
+      setRecords(records.map(r => r.id === record.id ? updated : r))
+    } catch (e) {
+      notify("Erro ao remover categoria", "error")
+    }
+  }
+
+  const addCategoryToRecord = async (record: FinancialRecord, catName: string) => {
+    const currentNames = record.categories?.map(c => c.name) || []
+    if (currentNames.includes(catName)) return
+    
+    const newCategories = [...currentNames, catName]
+    try {
+      const token = localStorage.getItem("access_token")
+      const res = await fetch(`${config.API_URL}/financial-records/${record.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ categoryNames: newCategories })
+      })
+      if (!res.ok) throw new Error("Failed to update categories")
+      const updated = await res.json()
+      setRecords(records.map(r => r.id === record.id ? updated : r))
+      fetchCategories() // In case a new category was created
+    } catch (e) {
+      notify("Erro ao adicionar categoria", "error")
+    }
+  }
+
+  const handleAddCategory = () => {
+    const val = newCategoryInput.trim()
+    if (val && !formData.selectedCategories.includes(val)) {
+      setFormData(prev => ({...prev, selectedCategories: [...prev.selectedCategories, val]}))
+      setNewCategoryInput('')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 p-4 md:p-8 pb-24">
@@ -618,7 +697,7 @@ export default function PlanejamentoFinanceiro() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-4 mb-6 bg-slate-900/30 p-4 rounded-xl border border-slate-800/50">
+        <div className="flex flex-col md:flex-row md:flex-wrap md:items-start gap-4 mb-6 bg-slate-900/30 p-4 rounded-xl border border-slate-800/50">
           <div className="flex flex-col gap-1 w-full md:w-auto">
             <label className="text-xs text-slate-500 uppercase font-bold">Buscar</label>
             <div className="flex items-center relative">
@@ -663,24 +742,25 @@ export default function PlanejamentoFinanceiro() {
           </div>
           <div className="flex flex-col gap-1 w-full md:w-auto">
             <label className="text-xs text-slate-500 uppercase font-bold">Categoria</label>
-            <div className="flex items-center gap-2">
-              <select 
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="w-full md:w-auto bg-slate-950 border border-slate-800 rounded px-3 py-1 text-sm text-slate-300 focus:border-blue-500 outline-none"
-              >
-                <option value="all">Todas</option>
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
-              {categoryFilter !== 'all' && (
+            <div className="flex flex-wrap gap-2 max-w-md">
+              {categories.map(cat => {
+                const isSelected = Array.isArray(categoryFilter) && categoryFilter.includes(cat.id.toString())
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => toggleCategoryFilter(cat.id.toString())}
+                    className={`px-2 py-0.5 rounded text-xs border transition-colors ${isSelected ? 'bg-blue-900/50 border-blue-500 text-blue-200' : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-600'}`}
+                  >
+                    {cat.name}
+                  </button>
+                )
+              })}
+              {categoryFilter.length > 0 && (
                 <button 
-                  onClick={() => handleDeleteCategoryClick(parseInt(categoryFilter))}
-                  className="p-1 text-slate-500 hover:text-red-500 transition-colors"
-                  title="Excluir Categoria Selecionada"
+                  onClick={() => setCategoryFilter([])}
+                  className="px-2 py-0.5 rounded text-xs border border-red-900/30 text-red-400 hover:bg-red-900/20"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  Limpar
                 </button>
               )}
             </div>
@@ -742,7 +822,7 @@ export default function PlanejamentoFinanceiro() {
         ) : (
           <div className="grid gap-4">
             {records.map((record) => (
-              <div key={record.id} className="bg-slate-900/50 border border-slate-800 p-4 rounded-xl hover:border-blue-500/30 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div key={record.id} className={`bg-slate-900/50 border p-4 rounded-xl transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${record.status === 'completed' ? 'border-green-500/30 opacity-75' : 'border-slate-800 hover:border-blue-500/30'}`}>
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
                     <h3 className="text-lg font-semibold text-white">{record.title}</h3>
@@ -751,7 +831,21 @@ export default function PlanejamentoFinanceiro() {
                     }`}>
                       {record.type === 'income' ? 'Receita' : 'Despesa'}
                     </span>
-                    <span className="text-xs text-slate-500 border border-slate-800 px-2 py-0.5 rounded-full">{getCategoryName(record.category_id)}</span>
+                    <div className="flex flex-wrap gap-1 items-center">
+                      {record.categories.map(cat => (
+                        <span key={cat.id} className="group flex items-center gap-1 text-xs text-slate-400 border border-slate-800 bg-slate-950 px-2 py-0.5 rounded-full">
+                          {cat.name}
+                          <button onClick={() => removeCategoryFromRecord(record, cat.name)} className="hidden group-hover:block text-red-400 hover:text-red-300"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                        </span>
+                      ))}
+                      <button 
+                        onClick={() => toggleRecordStatus(record)}
+                        className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ml-1 ${record.status === 'completed' ? 'bg-green-500 border-green-500 text-black' : 'border-slate-600 hover:border-slate-400'}`}
+                        title={record.status === 'completed' ? 'Marcar como pendente' : 'Marcar como concluído'}
+                      >
+                        {record.status === 'completed' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                      </button>
+                    </div>
                   </div>
                   <p className="text-slate-400 text-sm mb-2 line-clamp-2">{record.description}</p>
                   <div className="flex items-center gap-4 text-xs text-slate-500">
@@ -830,6 +924,17 @@ export default function PlanejamentoFinanceiro() {
                       placeholder="0,00"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Status</label>
+                    <select
+                      value={formData.status}
+                      onChange={e => setFormData({...formData, status: e.target.value as any})}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="pending">Pendente</option>
+                      <option value="completed">Concluído</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1">Título</label>
@@ -844,41 +949,58 @@ export default function PlanejamentoFinanceiro() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Categoria</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Categorias</label>
                   <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {formData.selectedCategories.map(catName => (
+                        <span key={catName} className="flex items-center gap-1 bg-blue-900/30 border border-blue-800 text-blue-200 px-2 py-1 rounded-full text-sm">
+                          {catName}
+                          <button 
+                            type="button"
+                            onClick={() => setFormData({...formData, selectedCategories: formData.selectedCategories.filter(c => c !== catName)})}
+                            className="hover:text-white"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
                     <div className="flex gap-2">
                       <select
-                        value={formData.categorySelection}
-                        onChange={e => setFormData({...formData, categorySelection: e.target.value})}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                        value=""
+                        onChange={e => {
+                          if (e.target.value && !formData.selectedCategories.includes(e.target.value)) {
+                            setFormData({...formData, selectedCategories: [...formData.selectedCategories, e.target.value]})
+                          }
+                        }}
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
                       >
-                        <option value="" disabled>Selecione...</option>
-                        {categories.map(cat => (
+                        <option value="">Adicionar existente...</option>
+                        {categories.filter(c => !formData.selectedCategories?.includes(c.name)).map(cat => (
                           <option key={cat.id} value={cat.name}>{cat.name}</option>
                         ))}
-                        <option value="__NEW__">+ Nova Categoria...</option>
                       </select>
-                      {formData.categorySelection && formData.categorySelection !== '__NEW__' && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCategoryClick(categories.find(c => c.name === formData.categorySelection)?.id!)}
-                          className="p-2 bg-slate-800 hover:bg-red-900/30 text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-800 rounded-lg transition-colors"
-                          title="Excluir esta categoria"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        </button>
-                      )}
-                    </div>
-                    {formData.categorySelection === '__NEW__' && (
                       <input
                         type="text"
-                        required
-                        value={formData.newCategoryName}
-                        onChange={e => setFormData({...formData, newCategoryName: e.target.value})}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
-                        placeholder="Nome da nova categoria"
+                        value={newCategoryInput}
+                        onChange={e => setNewCategoryInput(e.target.value)}
+                        placeholder="Ou criar nova..."
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleAddCategory()
+                          }
+                        }}
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
                       />
-                    )}
+                      <button
+                        type="button"
+                        onClick={handleAddCategory}
+                        className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-white transition-colors"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                 </div>
                 {!editingId && (
