@@ -606,30 +606,6 @@ export default function PlanejamentoFinanceiro() {
     }
   }
 
-  const addCategoryToRecord = async (record: FinancialRecord, catName: string) => {
-    const currentNames = record.categories?.map(c => c.name) || []
-    if (currentNames.includes(catName)) return
-    
-    const newCategories = [...currentNames, catName]
-    try {
-      const token = localStorage.getItem("access_token")
-      const res = await fetch(`${config.API_URL}/financial-records/${record.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ categoryNames: newCategories })
-      })
-      if (!res.ok) throw new Error("Failed to update categories")
-      const updated = await res.json()
-      setRecords(records.map(r => r.id === record.id ? updated : r))
-      fetchCategories() // In case a new category was created
-    } catch (e) {
-      notify("Erro ao adicionar categoria", "error")
-    }
-  }
-
   const handleAddCategory = () => {
     const val = newCategoryInput.trim()
     if (val && !formData.selectedCategories.includes(val)) {
