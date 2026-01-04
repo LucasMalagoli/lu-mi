@@ -20,6 +20,142 @@ interface Category {
   name: string
 }
 
+interface PaginationControlsProps {
+  currentPage: number
+  setCurrentPage: React.Dispatch<React.SetStateAction<number>>
+  itemsPerPage: number
+  setItemsPerPage: React.Dispatch<React.SetStateAction<number>>
+  totalRecords: number
+  isLoading: boolean
+}
+
+function PaginationControls({ 
+  currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalRecords, isLoading 
+}: PaginationControlsProps) {
+  const totalPages = Math.ceil(totalRecords / itemsPerPage)
+  const [isEditingPage, setIsEditingPage] = useState(false)
+  const [tempPage, setTempPage] = useState(currentPage.toString())
+  const [isCustomItems, setIsCustomItems] = useState(![10, 20, 50, 100, 200, 500].includes(itemsPerPage))
+  const [tempItemsPerPage, setTempItemsPerPage] = useState(itemsPerPage.toString())
+
+  useEffect(() => {
+    setTempPage(currentPage.toString())
+  }, [currentPage])
+
+  useEffect(() => {
+      const isStandard = [10, 20, 50, 100, 200, 500].includes(itemsPerPage)
+      if (!isStandard) setIsCustomItems(true)
+      setTempItemsPerPage(itemsPerPage.toString())
+  }, [itemsPerPage])
+
+  const handlePageSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    let p = parseInt(tempPage)
+    if (isNaN(p)) p = 1
+    if (p < 1) p = 1
+    if (p > totalPages) p = totalPages
+    setCurrentPage(p)
+    setIsEditingPage(false)
+  }
+
+  const handleItemsPerPageSubmit = () => {
+    let val = parseInt(tempItemsPerPage)
+    if (isNaN(val) || val < 1) val = 1
+    setItemsPerPage(val)
+    setTempItemsPerPage(val.toString())
+  }
+
+  if (isLoading || totalRecords === 0) return null
+
+  return (
+    <div className="flex flex-col md:flex-row items-center justify-between gap-4 my-4 bg-slate-900/30 p-4 rounded-xl border border-slate-800/50">
+      <div className="flex items-center gap-2 text-sm text-slate-400">
+        <span>Itens por página:</span>
+        {isCustomItems ? (
+           <div className="flex items-center gap-2">
+              <input 
+                type="number"
+                value={tempItemsPerPage}
+                onChange={(e) => setTempItemsPerPage(e.target.value)}
+                onBlur={handleItemsPerPageSubmit}
+                onKeyDown={(e) => { if(e.key === 'Enter') handleItemsPerPageSubmit() }}
+                className="w-20 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white focus:border-blue-500 outline-none"
+              />
+              <button onClick={() => setIsCustomItems(false)} className="text-xs text-blue-400 hover:underline">Lista</button>
+           </div>
+        ) : (
+          <div className="relative flex items-center">
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                if (e.target.value === 'custom') {
+                  setIsCustomItems(true)
+                } else {
+                  setItemsPerPage(Number(e.target.value))
+                }
+              }}
+              className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white focus:border-blue-500 outline-none appearance-none pr-8"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value={500}>500</option>
+              <option value="custom">Outro...</option>
+            </select>
+            <div className="absolute right-2 pointer-events-none text-slate-500">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </div>
+          </div>
+        )}
+        {itemsPerPage > 100 && <span className="text-yellow-500 text-xs ml-2">(Pode ser lento)</span>}
+      </div>
+      
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+          disabled={currentPage === 1}
+          className="p-2 rounded-lg bg-slate-800 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-700 transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+        </button>
+        <span className="text-sm text-slate-300 flex items-center gap-1">
+          Página 
+          {isEditingPage ? (
+            <form onSubmit={handlePageSubmit} className="inline-block">
+                <input 
+                    type="number" 
+                    value={tempPage}
+                    onChange={(e) => setTempPage(e.target.value)}
+                    onBlur={handlePageSubmit}
+                    autoFocus
+                    className="w-16 text-center bg-slate-950 border border-blue-500 rounded px-1 py-0.5 text-white text-sm outline-none"
+                />
+            </form>
+          ) : (
+            <span 
+                onClick={() => { setTempPage(currentPage.toString()); setIsEditingPage(true); }}
+                className="font-bold text-white cursor-pointer hover:text-blue-400 hover:underline px-1"
+                title="Clique para ir para uma página"
+            >
+                {currentPage}
+            </span>
+          )}
+          de <span className="font-bold text-white">{totalPages}</span>
+        </span>
+        <button
+          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+          disabled={currentPage >= totalPages}
+          className="p-2 rounded-lg bg-slate-800 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-700 transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function PlanejamentoFinanceiro() {
   const navigate = useNavigate()
   const { notify } = useNotify()
@@ -42,12 +178,47 @@ export default function PlanejamentoFinanceiro() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  const getCurrentMonthRange = () => {
+    const now = new Date()
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    const format = (d: Date) => {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
+    }
+    return { start: format(firstDay), end: format(lastDay) }
+  }
+
+  const [initialFilters] = useState(() => {
+    try {
+      const saved = localStorage.getItem('finance_filters')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return {
+      sortBy: 'billDate',
+      typeFilter: 'all',
+      categoryFilter: 'all',
+      dateRange: getCurrentMonthRange(),
+      searchTerm: ''
+    }
+  })
   
   // Filters
-  const [sortBy, setSortBy] = useState<'billDate' | 'value' | 'created'>('billDate')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all')
-  const [categoryFilter, setCategoryFilter] = useState<string>('all')
-  const [dateRange, setDateRange] = useState({ start: '', end: '' })
+  const [sortBy, setSortBy] = useState<'billDate' | 'value' | 'created'>(initialFilters.sortBy as any)
+  const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>(initialFilters.typeFilter as any)
+  const [categoryFilter, setCategoryFilter] = useState<string>(initialFilters.categoryFilter)
+  const [dateRange, setDateRange] = useState(initialFilters.dateRange)
+  const [searchTerm, setSearchTerm] = useState(initialFilters.searchTerm || '')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(initialFilters.searchTerm || '')
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(100)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [serverTotals, setServerTotals] = useState({ income: 0, expense: 0 })
 
   // Form State
   const [formData, setFormData] = useState({
@@ -67,17 +238,58 @@ export default function PlanejamentoFinanceiro() {
       .finally(() => setIsLoading(false))
   }, [])
 
+  useEffect(() => {
+    localStorage.setItem('finance_filters', JSON.stringify({
+      sortBy, typeFilter, categoryFilter, dateRange, searchTerm
+    }))
+  }, [sortBy, typeFilter, categoryFilter, dateRange, searchTerm])
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearchTerm(searchTerm), 1000)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [sortBy, typeFilter, categoryFilter, dateRange, debouncedSearchTerm, itemsPerPage])
+
+  useEffect(() => {
+    fetchRecords()
+  }, [currentPage, itemsPerPage, sortBy, typeFilter, categoryFilter, dateRange, debouncedSearchTerm])
+
   const fetchRecords = async () => {
+    setIsLoading(true)
     try {
       const token = localStorage.getItem("access_token")
-      const res = await fetch(`${config.API_URL}/financial-records`, {
+      
+      const params = new URLSearchParams({
+        skip: ((currentPage - 1) * itemsPerPage).toString(),
+        limit: itemsPerPage.toString(),
+        sort_by: sortBy
+      })
+
+      if (typeFilter !== 'all') params.append('type', typeFilter)
+      if (categoryFilter !== 'all') params.append('category_id', categoryFilter)
+      if (dateRange.start) params.append('start_date', dateRange.start)
+      if (dateRange.end) params.append('end_date', dateRange.end)
+      if (debouncedSearchTerm) params.append('search', debouncedSearchTerm)
+
+      const res = await fetch(`${config.API_URL}/financial-records?${params.toString()}`, {
         headers: { "Authorization": `Bearer ${token}` }
       })
       if (!res.ok) throw new Error("Failed to fetch")
       const data = await res.json()
-      setRecords(data)
+      
+      setRecords(data.items)
+      setTotalRecords(data.total)
+      setServerTotals({
+        income: data.total_income,
+        expense: data.total_expense
+      })
     } catch (error) {
       notify("Erro ao carregar registros", "error")
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -320,33 +532,25 @@ export default function PlanejamentoFinanceiro() {
     setIsMonthModalOpen(false)
   }
 
+  const handleYearSelect = () => {
+    const year = monthPickerYear
+    setDateRange({ start: `${year}-01-01`, end: `${year}-12-31` })
+    setIsMonthModalOpen(false)
+  }
+
   const handleClearFilters = () => {
     setSortBy('billDate')
     setTypeFilter('all')
     setCategoryFilter('all')
-    setDateRange({ start: '', end: '' })
+    setDateRange(getCurrentMonthRange())
+    setSearchTerm('')
+    setDebouncedSearchTerm('')
   }
 
   // Derived State
-  const filteredRecords = records
-    .filter(r => {
-      if (typeFilter !== 'all' && r.type !== typeFilter) return false
-      if (categoryFilter !== 'all' && r.category_id !== parseInt(categoryFilter)) return false
-      
-      if (dateRange.start && new Date(r.bill_date) < new Date(dateRange.start)) return false
-      if (dateRange.end && new Date(r.bill_date) > new Date(dateRange.end)) return false
-      
-      return true
-    })
-    .sort((a, b) => {
-      if (sortBy === 'billDate') return new Date(a.bill_date).getTime() - new Date(b.bill_date).getTime()
-      if (sortBy === 'value') return b.value - a.value
-      if (sortBy === 'created') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      return 0
-    })
-
-  const totalIncome = filteredRecords.filter(r => r.type === 'income').reduce((acc, r) => acc + r.value, 0)
-  const totalExpense = filteredRecords.filter(r => r.type === 'expense').reduce((acc, r) => acc + r.value, 0)
+  // Filtering is now server-side
+  const totalIncome = serverTotals.income
+  const totalExpense = serverTotals.expense
   const totalOverall = totalIncome - totalExpense
 
   const formatCurrency = (val: number) => {
@@ -415,6 +619,24 @@ export default function PlanejamentoFinanceiro() {
 
         {/* Filters */}
         <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-4 mb-6 bg-slate-900/30 p-4 rounded-xl border border-slate-800/50">
+          <div className="flex flex-col gap-1 w-full md:w-auto">
+            <label className="text-xs text-slate-500 uppercase font-bold">Buscar</label>
+            <div className="flex items-center relative">
+              <input 
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Título ou descrição..."
+                className="w-full md:w-64 bg-slate-950 border border-slate-800 rounded-l px-3 py-1 text-sm text-slate-300 focus:border-blue-500 outline-none"
+              />
+              <button
+                onClick={() => setDebouncedSearchTerm(searchTerm)}
+                className="bg-slate-800 border border-l-0 border-slate-800 rounded-r px-3 py-1 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              </button>
+            </div>
+          </div>
           <div className="flex flex-col gap-1 w-full md:w-auto">
             <label className="text-xs text-slate-500 uppercase font-bold">Ordenar por</label>
             <select 
@@ -499,18 +721,27 @@ export default function PlanejamentoFinanceiro() {
           </div>
         </div>
 
+        <PaginationControls 
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          itemsPerPage={itemsPerPage}
+          setItemsPerPage={setItemsPerPage}
+          totalRecords={totalRecords}
+          isLoading={isLoading}
+        />
+
         {/* List */}
         {isLoading ? (
           <div className="flex justify-center py-20">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
           </div>
-        ) : filteredRecords.length === 0 ? (
+        ) : records.length === 0 ? (
           <div className="text-center py-16 text-slate-500 bg-slate-900/30 rounded-xl border border-dashed border-slate-800">
             Nenhum registro encontrado.
           </div>
         ) : (
           <div className="grid gap-4">
-            {filteredRecords.map((record) => (
+            {records.map((record) => (
               <div key={record.id} className="bg-slate-900/50 border border-slate-800 p-4 rounded-xl hover:border-blue-500/30 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
@@ -558,6 +789,16 @@ export default function PlanejamentoFinanceiro() {
             ))}
           </div>
         )}
+
+        {/* Pagination Controls */}
+        <PaginationControls 
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          itemsPerPage={itemsPerPage}
+          setItemsPerPage={setItemsPerPage}
+          totalRecords={totalRecords}
+          isLoading={isLoading}
+        />
 
         {/* Modal */}
         {isModalOpen && (
@@ -784,7 +1025,13 @@ export default function PlanejamentoFinanceiro() {
                 <button onClick={() => setMonthPickerYear(y => y - 1)} className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                 </button>
-                <span className="text-lg font-bold text-white">{monthPickerYear}</span>
+                <button 
+                  onClick={handleYearSelect}
+                  className="text-lg font-bold text-white hover:text-blue-400 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+                  title="Selecionar todo o ano"
+                >
+                  {monthPickerYear}
+                </button>
                 <button onClick={() => setMonthPickerYear(y => y + 1)} className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 </button>

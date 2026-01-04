@@ -1,5 +1,6 @@
 import logging
-from datetime import datetime
+from datetime import datetime, date
+from typing import Optional
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -7,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from jose import jwt, JWTError
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import select, func, or_, desc, asc, case
 from pydantic import BaseModel
 
 from app.auth import authenticate_user, create_access_token, SECRET_KEY, ALGORITHM
@@ -230,14 +231,84 @@ async def create_financial_record(
     return new_record
 
 
-@app.get("/financial-records", response_model=list[FinancialRecord])
+class FinancialRecordsResponse(BaseModel):
+    items: list[FinancialRecord]
+    total: int
+    total_income: float
+    total_expense: float
+
+
+@app.get("/financial-records", response_model=FinancialRecordsResponse)
 async def get_financial_records(
     user: User = Depends(get_current_user_obj),
     session: AsyncSession = Depends(get_session),
+    skip: int = 0,
+    limit: int = 100,
+    type: Optional[TransactionType] = None,
+    category_id: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    search: Optional[str] = None,
+    sort_by: str = "billDate",
 ):
-    statement = select(FinancialRecord).where(FinancialRecord.user_id == user.id)
-    result = await session.execute(statement)
-    return result.scalars().all()
+    query = select(FinancialRecord).where(FinancialRecord.user_id == user.id)
+
+    # Filters
+    if type:
+        query = query.where(FinancialRecord.type == type)
+    if category_id:
+        query = query.where(FinancialRecord.category_id == category_id)
+    if start_date:
+        query = query.where(FinancialRecord.bill_date >= start_date)
+    if end_date:
+        query = query.where(FinancialRecord.bill_date <= end_date)
+    if search:
+        search_filter = or_(
+            FinancialRecord.title.ilike(f"%{search}%"),
+            FinancialRecord.description.ilike(f"%{search}%")
+        )
+        query = query.where(search_filter)
+
+    # Calculate totals before pagination
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await session.execute(count_query)
+    total = total_result.scalar_one()
+
+    # Calculate sums
+    # We need to execute the query to get sums. 
+    # A more efficient way in SQL would be aggregation, but reusing the filtered query is safer for consistency.
+    # Let's use a separate aggregation query based on the same filters.
+    income_query = query.where(FinancialRecord.type == TransactionType.INCOME).with_only_columns(func.sum(FinancialRecord.value))
+    expense_query = query.where(FinancialRecord.type == TransactionType.EXPENSE).with_only_columns(func.sum(FinancialRecord.value))
+    
+    income_result = await session.execute(income_query)
+    expense_result = await session.execute(expense_query)
+    
+    total_income = income_result.scalar_one() or 0.0
+    total_expense = expense_result.scalar_one() or 0.0
+
+    # Sorting
+    if sort_by == "value":
+        # Sort by signed value (Income positive, Expense negative)
+        signed_value = case((FinancialRecord.type == TransactionType.INCOME, FinancialRecord.value), else_=-FinancialRecord.value)
+        query = query.order_by(desc(signed_value))
+    elif sort_by == "created":
+        query = query.order_by(desc(FinancialRecord.created_at))
+    else: # billDate
+        query = query.order_by(asc(FinancialRecord.bill_date))
+
+    # Pagination
+    query = query.offset(skip).limit(limit)
+    
+    result = await session.execute(query)
+    items = result.scalars().all()
+
+    return {
+        "items": items,
+        "total": total,
+        "total_income": total_income,
+        "total_expense": total_expense
+    }
 
 
 @app.delete("/financial-records/{record_id}")
