@@ -28,7 +28,8 @@ from .database import init_db, get_session, engine
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-SMTP_EMAIL = "mpslucas14@gmail.com"
+SMTP_EMAIL_FROM = "mpslucas14@gmail.com"
+SMTP_EMAIL_TO = "kleinmilena@live.com"
 SMTP_PASSWORD = "bpsklyfjtbhqhgjv"
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
@@ -38,8 +39,8 @@ def send_email_alert(payload: str):
     msg = EmailMessage()
     msg.set_content(f"New database connection detected:\n\n{payload}")
     msg["Subject"] = "New Database Connection Alert"
-    msg["From"] = SMTP_EMAIL
-    msg["To"] = SMTP_EMAIL
+    msg["From"] = SMTP_EMAIL_FROM
+    msg["To"] = SMTP_EMAIL_TO
 
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
