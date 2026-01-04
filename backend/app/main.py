@@ -21,7 +21,7 @@ from .models import (
     User, Resolution, ResolutionCreate, ResolutionUpdate,
     FinancialRecord, FinancialRecordCreate, FinancialRecordUpdate,
     FinancialRecordRead, Category, CategoryRead, TransactionType,
-    FinancialRecordStatus
+    FinancialRecordStatus, FinancialRecordCategoryLink
 )
 from .database import init_db, get_session, engine
 
@@ -43,11 +43,12 @@ def send_email_alert(payload: str):
     msg["To"] = SMTP_EMAIL_TO
 
     try:
+        logger.info("Trying to send email alert...")
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls()
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
             server.send_message(msg)
-        logger.info("Email alert sent successfully")
+            logger.info("Email alert sent successfully")
     except Exception as e:
         logger.error(f"Failed to send email alert: {e}")
 
@@ -451,7 +452,13 @@ async def get_categories(
     user: User = Depends(get_current_user_obj),
     session: AsyncSession = Depends(get_session),
 ):
-    statement = select(Category).where(Category.user_id == user.id)
+    statement = (
+        select(Category)
+        .outerjoin(FinancialRecordCategoryLink, Category.id == FinancialRecordCategoryLink.category_id)
+        .where(Category.user_id == user.id)
+        .group_by(Category.id)
+        .order_by(desc(func.count(FinancialRecordCategoryLink.financial_record_id)), Category.name)
+    )
     result = await session.execute(statement)
     return result.scalars().all()
 

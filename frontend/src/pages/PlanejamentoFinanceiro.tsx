@@ -234,6 +234,7 @@ export default function PlanejamentoFinanceiro() {
     installments: 2
   })
   const [newCategoryInput, setNewCategoryInput] = useState('')
+  const [showAllCategories, setShowAllCategories] = useState(false)
 
   useEffect(() => {
     Promise.all([fetchRecords(), fetchCategories()])
@@ -333,7 +334,10 @@ export default function PlanejamentoFinanceiro() {
         description: '',
         value: '',
         type: 'expense',
-        billDate: '',
+        billDate: (() => {
+          const d = new Date()
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        })(),
         selectedCategories: [],
         status: 'pending',
         isInstallment: false,
@@ -719,18 +723,37 @@ export default function PlanejamentoFinanceiro() {
           <div className="flex flex-col gap-1 w-full md:w-auto">
             <label className="text-xs text-slate-500 uppercase font-bold">Categoria</label>
             <div className="flex flex-wrap gap-2 max-w-md">
-              {categories.map(cat => {
+              {(showAllCategories ? categories : categories.slice(0, 10)).map(cat => {
                 const isSelected = Array.isArray(categoryFilter) && categoryFilter.includes(cat.id.toString())
                 return (
-                  <button
+                  <div
                     key={cat.id}
                     onClick={() => toggleCategoryFilter(cat.id.toString())}
-                    className={`px-2 py-0.5 rounded text-xs border transition-colors ${isSelected ? 'bg-blue-900/50 border-blue-500 text-blue-200' : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-600'}`}
+                    className={`group flex items-center gap-1 px-3 py-1 rounded text-sm border transition-colors cursor-pointer select-none ${isSelected ? 'bg-blue-900/50 border-blue-500 text-blue-200' : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-600'}`}
                   >
-                    {cat.name}
-                  </button>
+                    <span>{cat.name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDeletingCategoryId(cat.id)
+                        setIsDeleteCategoryModalOpen(true)
+                      }}
+                      className="hidden group-hover:block text-slate-500 hover:text-red-500 -mr-1"
+                      title="Excluir Categoria"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  </div>
                 )
               })}
+              {categories.length > 10 && (
+                <button 
+                  onClick={() => setShowAllCategories(!showAllCategories)}
+                  className="px-2 py-0.5 rounded text-xs border border-slate-700 text-slate-400 hover:bg-slate-800 transition-colors"
+                >
+                  {showAllCategories ? "Ver menos" : "Ver mais"}
+                </button>
+              )}
               {categoryFilter.length > 0 && (
                 <button 
                   onClick={() => setCategoryFilter([])}
@@ -799,9 +822,16 @@ export default function PlanejamentoFinanceiro() {
           <div className="grid gap-4">
             {records.map((record) => (
               <div key={record.id} className={`bg-slate-900/50 border p-4 rounded-xl transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${record.status === 'completed' ? 'border-green-500/30 opacity-75' : 'border-slate-800 hover:border-blue-500/30'}`}>
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="text-lg font-semibold text-white">{record.title}</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-3 mb-1">
+                    <button 
+                      onClick={() => toggleRecordStatus(record)}
+                      className={`w-6 h-6 rounded-full border flex items-center justify-center transition-all ${record.status === 'completed' ? 'bg-green-500 border-green-500 text-black' : 'border-slate-600 hover:border-slate-400 group'}`}
+                      title={record.status === 'completed' ? 'Marcar como pendente' : 'Marcar como concluído'}
+                    >
+                      <svg className={`w-3.5 h-3.5 transition-opacity ${record.status === 'completed' ? 'opacity-100' : 'opacity-10 group-hover:opacity-50 text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                    </button>
+                    <h3 className="text-lg font-semibold text-white break-words">{record.title}</h3>
                     <span className={`text-xs px-2 py-0.5 rounded-full border ${
                       record.type === 'income' ? 'bg-green-900/30 border-green-800 text-green-400' : 'bg-red-900/30 border-red-800 text-red-400'
                     }`}>
@@ -814,16 +844,9 @@ export default function PlanejamentoFinanceiro() {
                           <button onClick={() => removeCategoryFromRecord(record, cat.name)} className="hidden group-hover:block text-red-400 hover:text-red-300"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
                         </span>
                       ))}
-                      <button 
-                        onClick={() => toggleRecordStatus(record)}
-                        className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ml-1 ${record.status === 'completed' ? 'bg-green-500 border-green-500 text-black' : 'border-slate-600 hover:border-slate-400'}`}
-                        title={record.status === 'completed' ? 'Marcar como pendente' : 'Marcar como concluído'}
-                      >
-                        {record.status === 'completed' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                      </button>
                     </div>
                   </div>
-                  <p className="text-slate-400 text-sm mb-2 line-clamp-2">{record.description}</p>
+                  <p className="text-slate-400 text-sm mb-2 [overflow-wrap:anywhere] whitespace-pre-wrap">{record.description}</p>
                   <div className="flex items-center gap-4 text-xs text-slate-500">
                     <span>Vencimento: {new Date(record.bill_date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</span>
                     <span>Registrado em: {new Date(record.created_at).toLocaleDateString('pt-BR')}</span>
@@ -873,20 +896,25 @@ export default function PlanejamentoFinanceiro() {
         {/* Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 md:p-8">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 md:p-8 max-h-[90vh] overflow-y-auto">
               <h2 className="text-2xl font-bold text-white mb-6">{editingId ? 'Editar Lançamento' : 'Novo Lançamento'}</h2>
               <form onSubmit={handleSave} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-400 mb-1">Tipo</label>
-                    <select
-                      value={formData.type}
-                      onChange={e => setFormData({...formData, type: e.target.value as any})}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
-                    >
-                      <option value="expense">Despesa</option>
-                      <option value="income">Receita</option>
-                    </select>
+                    <div className="relative">
+                      <select
+                        value={formData.type}
+                        onChange={e => setFormData({...formData, type: e.target.value as any})}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 appearance-none"
+                      >
+                        <option value="expense">Despesa</option>
+                        <option value="income">Receita</option>
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </div>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-400 mb-1">Valor (R$)</label>
@@ -902,14 +930,19 @@ export default function PlanejamentoFinanceiro() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-400 mb-1">Status</label>
-                    <select
-                      value={formData.status}
-                      onChange={e => setFormData({...formData, status: e.target.value as any})}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
-                    >
-                      <option value="pending">Pendente</option>
-                      <option value="completed">Concluído</option>
-                    </select>
+                    <div className="relative">
+                      <select
+                        value={formData.status}
+                        onChange={e => setFormData({...formData, status: e.target.value as any})}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 appearance-none"
+                      >
+                        <option value="pending">Pendente</option>
+                        <option value="completed">Concluído</option>
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div>
@@ -941,21 +974,26 @@ export default function PlanejamentoFinanceiro() {
                         </span>
                       ))}
                     </div>
-                    <div className="flex gap-2">
-                      <select
-                        value=""
-                        onChange={e => {
-                          if (e.target.value && !formData.selectedCategories.includes(e.target.value)) {
-                            setFormData({...formData, selectedCategories: [...formData.selectedCategories, e.target.value]})
-                          }
-                        }}
-                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
-                      >
-                        <option value="">Adicionar existente...</option>
-                        {categories.filter(c => !formData.selectedCategories?.includes(c.name)).map(cat => (
-                          <option key={cat.id} value={cat.name}>{cat.name}</option>
-                        ))}
-                      </select>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <div className="relative flex-1">
+                        <select
+                          value=""
+                          onChange={e => {
+                            if (e.target.value && !formData.selectedCategories.includes(e.target.value)) {
+                              setFormData({...formData, selectedCategories: [...formData.selectedCategories, e.target.value]})
+                            }
+                          }}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 appearance-none"
+                        >
+                          <option value="">Adicionar existente...</option>
+                          {categories.filter(c => !formData.selectedCategories?.includes(c.name)).map(cat => (
+                            <option key={cat.id} value={cat.name}>{cat.name}</option>
+                          ))}
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </div>
+                      </div>
                       <input
                         type="text"
                         value={newCategoryInput}
@@ -1125,7 +1163,7 @@ export default function PlanejamentoFinanceiro() {
                 </button>
                 <button 
                   onClick={handleYearSelect}
-                  className="text-lg font-bold text-white hover:text-blue-400 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+                  className="text-lg font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-blue-600 transition-colors px-4 py-1 rounded-lg"
                   title="Selecionar todo o ano"
                 >
                   {monthPickerYear}
