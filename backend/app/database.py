@@ -4,7 +4,12 @@ from sqlalchemy.orm import sessionmaker
 from typing import AsyncGenerator
 from .config import settings
 
-engine = create_async_engine(settings.database_url, echo=True, future=True)
+engine = create_async_engine(
+    settings.database_url,
+    echo=True,
+    future=True,
+    connect_args={"server_settings": {"application_name": "fastapi-backend"}},
+)
 
 
 async def init_db():
