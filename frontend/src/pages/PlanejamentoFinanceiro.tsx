@@ -440,17 +440,14 @@ export default function PlanejamentoFinanceiro() {
         })
 
         if (!res.ok) throw new Error("Failed to save")
-        
-        const savedRecord = await res.json()
-        
+    
         if (editingId) {
-          setRecords(records.map(r => r.id === editingId ? savedRecord : r))
           notify("Registro atualizado!", "success")
         } else {
-          setRecords([...records, savedRecord])
           notify("Registro criado!", "success")
         }
         
+        fetchRecords()
         fetchCategories()
         setIsModalOpen(false)
       }
@@ -896,7 +893,7 @@ export default function PlanejamentoFinanceiro() {
         {/* Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 md:p-8 max-h-[90vh] overflow-y-auto">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 md:p-8 max-h-[90vh] overflow-hidden">
               <h2 className="text-2xl font-bold text-white mb-6">{editingId ? 'Editar Lançamento' : 'Novo Lançamento'}</h2>
               <form onSubmit={handleSave} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
