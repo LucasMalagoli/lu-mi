@@ -1003,7 +1003,7 @@ export default function PlanejamentoFinanceiro() {
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1">Categorias</label>
                   <div className="flex flex-col gap-2">
-                    <div className="flex flex-wrap gap-2 mb-2">
+                    <div className="flex flex-wrap gap-2 mb-2 max-h-24 overflow-y-auto">
                       {formData.selectedCategories.map(catName => (
                         <span key={catName} className="flex items-center gap-1 bg-blue-900/30 border border-blue-800 text-blue-200 px-2 py-1 rounded-full text-sm">
                           {catName}

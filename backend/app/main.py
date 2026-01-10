@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from jose import jwt, JWTError
 from contextlib import asynccontextmanager
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, func, or_, desc, asc, case
@@ -281,10 +282,18 @@ async def create_financial_record(
         category = result.scalars().first()
         
         if not category:
-            category = Category(name=cat_name, user_id=user.id)
-            session.add(category)
-            await session.commit()
-            await session.refresh(category)
+            try:
+                category = Category(name=cat_name, user_id=user.id)
+                session.add(category)
+                await session.commit()
+                await session.refresh(category)
+            except IntegrityError:
+                await session.rollback()
+                statement = select(Category).where(Category.name == cat_name, Category.user_id == user.id)
+                result = await session.execute(statement)
+                category = result.scalars().first()
+                if not category:
+                    raise HTTPException(status_code=500, detail="Failed to create or retrieve category")
         categories.append(category)
     
     new_record = FinancialRecord(
@@ -432,10 +441,18 @@ async def update_financial_record(
                 category = cat_result.scalars().first()
                 
                 if not category:
-                    category = Category(name=cat_name, user_id=user.id)
-                    session.add(category)
-                    await session.commit()
-                    await session.refresh(category)
+                    try:
+                        category = Category(name=cat_name, user_id=user.id)
+                        session.add(category)
+                        await session.commit()
+                        await session.refresh(category)
+                    except IntegrityError:
+                        await session.rollback()
+                        cat_stmt = select(Category).where(Category.name == cat_name, Category.user_id == user.id)
+                        cat_result = await session.execute(cat_stmt)
+                        category = cat_result.scalars().first()
+                        if not category:
+                            raise HTTPException(status_code=500, detail="Failed to create or retrieve category")
                 new_categories.append(category)
             record.categories = new_categories
 
@@ -594,8 +611,12 @@ async def create_category(
     
     category = Category(name=category_data.name, user_id=user.id)
     session.add(category)
-    await session.commit()
-    await session.refresh(category)
+    try:
+        await session.commit()
+        await session.refresh(category)
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail="Category already exists")
     return category
 
 

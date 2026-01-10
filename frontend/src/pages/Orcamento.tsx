@@ -526,7 +526,7 @@ export default function Orcamento() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1">Categorias</label>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
                   {summary.map(cat => (
                     <button
                       key={cat.category_id}
