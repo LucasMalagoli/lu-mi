@@ -1,8 +1,5 @@
 import logging
-import asyncio
-import smtplib
 import calendar
-from email.message import EmailMessage
 from datetime import datetime, date
 from typing import Optional
 
@@ -11,7 +8,6 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from jose import jwt, JWTError
 from contextlib import asynccontextmanager
-from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -26,77 +22,16 @@ from .models import (
     FinancialRecordStatus, FinancialRecordCategoryLink,
     CategoryBudget, CategoryBudgetCreate, CategoryCreate
 )
-from .database import init_db, get_session, engine
+from .database import init_db, get_session
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-SMTP_EMAIL_FROM = "mpslucas14@gmail.com"
-SMTP_EMAIL_TO = "kleinmilena@live.com"
-SMTP_PASSWORD = "bpsklyfjtbhqhgjv"
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-
-
-def send_email_alert(payload: str):
-    msg = EmailMessage()
-    msg.set_content(f"New database connection detected:\n\n{payload}")
-    msg["Subject"] = "New Database Connection Alert"
-    msg["From"] = SMTP_EMAIL_FROM
-    msg["To"] = SMTP_EMAIL_TO
-
-    try:
-        logger.info("Trying to send email alert...")
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            server.send_message(msg)
-            logger.info("Email alert sent successfully")
-    except Exception as e:
-        logger.error(f"Failed to send email alert: {e}")
-
-
-async def monitor_database_connections():
-    """
-    Background task to monitor DB connections.
-    It listens for 'new_connection' notifications and periodically triggers the check.
-    """
-    while True:
-        try:
-            async with engine.connect() as conn:
-                raw_conn = await conn.get_raw_connection()
-                driver_conn = raw_conn.driver_connection
-                loop = asyncio.get_running_loop()
-
-                def on_notify(conn, pid, channel, payload):
-                    logger.info(f"New DB Connection detected: {payload}")
-                    loop.run_in_executor(None, send_email_alert, payload)
-
-                await driver_conn.add_listener("new_connection", on_notify)
-                logger.info("Started monitoring database connections...")
-
-                while True:
-                    await conn.execute(text("SELECT notify_new_connections()"))
-                    await conn.commit()
-                    await asyncio.sleep(60)
-        except asyncio.CancelledError:
-            logger.info("Stopping database connection monitor...")
-            break
-        except Exception as e:
-            logger.error(f"Error in database connection monitor: {e}")
-            await asyncio.sleep(60)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    monitor_task = asyncio.create_task(monitor_database_connections())
     yield
-    monitor_task.cancel()
-    try:
-        await monitor_task
-    except asyncio.CancelledError:
-        pass
 
 
 app = FastAPI(
