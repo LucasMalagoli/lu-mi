@@ -33,7 +33,15 @@ export default function Orcamento() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editValue, setEditValue] = useState("")
-  const [hideZeroCategories, setHideZeroCategories] = useState(false)
+  const [hideZeroCategories, setHideZeroCategories] = useState(true)
+  const [hiddenCategoryIds, setHiddenCategoryIds] = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem('budget_hidden_categories')
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
   const [areValuesVisible, setAreValuesVisible] = useState(true)
   
   // Details expansion
@@ -61,6 +69,10 @@ export default function Orcamento() {
   useEffect(() => {
     fetchSummary()
   }, [currentDate])
+
+  useEffect(() => {
+    localStorage.setItem('budget_hidden_categories', JSON.stringify(Array.from(hiddenCategoryIds)))
+  }, [hiddenCategoryIds])
 
   const fetchSummary = async () => {
     setIsLoading(true)
@@ -284,10 +296,20 @@ export default function Orcamento() {
     }
   }
 
+  const toggleCategoryVisibility = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setHiddenCategoryIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   const filteredSummary = summary.filter(item => {
-    if (hideZeroCategories) {
-      return item.planned !== 0 || item.confirmed !== 0 || item.expected !== 0
-    }
+    if (!hideZeroCategories) return true
+    if (hiddenCategoryIds.has(item.category_id)) return false
+    if (item.planned === 0 && item.confirmed === 0 && item.expected === 0) return false
     return true
   })
 
@@ -326,7 +348,7 @@ export default function Orcamento() {
                     : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
                 }`}
               >
-                {hideZeroCategories ? 'Mostrar Zerados' : 'Ocultar Zerados'}
+                {hideZeroCategories ? 'Mostrar Tudo' : 'Ocultar Vazios'}
               </button>
               <button
                 onClick={() => handleCopyBudget()}
@@ -372,8 +394,10 @@ export default function Orcamento() {
               const barColor = isExpense ? 'bg-red-500' : 'bg-green-500'
               const bgColor = isExpense ? 'bg-red-900/20' : 'bg-green-900/20'
 
+              const isHidden = hiddenCategoryIds.has(item.category_id)
+
               return (
-                <div key={item.category_id} className="bg-slate-900/50 border border-slate-800 p-4 rounded-xl">
+                <div key={item.category_id} className={`bg-slate-900/50 border p-4 rounded-xl ${isHidden ? 'border-slate-800/50 opacity-60' : 'border-slate-800'}`}>
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-2">
                       <button 
@@ -383,6 +407,17 @@ export default function Orcamento() {
                         <svg className={`w-5 h-5 transition-transform ${expandedCategories.has(item.category_id) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                       </button>
                       <h3 className="font-semibold text-lg text-white">{item.category_name}</h3>
+                      <button
+                        onClick={(e) => toggleCategoryVisibility(item.category_id, e)}
+                        className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
+                        title={isHidden ? "Mostrar categoria" : "Ocultar categoria"}
+                      >
+                        {isHidden ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        )}
+                      </button>
                     </div>
                     <div className="text-right">
                       {editingId === item.category_id ? (
