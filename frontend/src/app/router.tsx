@@ -8,6 +8,7 @@ import PlanejamentoFinanceiro from '../pages/PlanejamentoFinanceiro'
 import Settings from '../pages/Settings'
 import AppLayout from '../components/layout/AppLayout'
 import ProtectedRoute from '../routes/ProtectedRoute'
+import Orcamento from '../pages/Orcamento'
 
 export const router = createBrowserRouter([
   {
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
           { path: '/', element: <Home /> },
           { path: '/resolucoes', element: <Resolucoes /> },
           // { path: '/projects', element: <Projects /> },
+          { path: '/orcamento', element: <Orcamento /> },
           { path: '/financeiro', element: <PlanejamentoFinanceiro /> },
           { path: '/configuracoes', element: <Settings /> },
         ],

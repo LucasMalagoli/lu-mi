@@ -170,6 +170,8 @@ export default function PlanejamentoFinanceiro() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isDeleteCategoryModalOpen, setIsDeleteCategoryModalOpen] = useState(false)
   const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null)
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState("")
   const [isMonthModalOpen, setIsMonthModalOpen] = useState(false)
   const [monthPickerYear, setMonthPickerYear] = useState(new Date().getFullYear())
   const [areValuesVisible, setAreValuesVisible] = useState(true)
@@ -363,6 +365,25 @@ export default function PlanejamentoFinanceiro() {
     })
     setNewCategoryInput('')
     setIsModalOpen(true)
+  }
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) return
+    try {
+      const token = localStorage.getItem("access_token")
+      const res = await fetch(`${config.API_URL}/categories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ name: newCategoryName })
+      })
+      if (!res.ok) throw new Error("Failed to create category")
+      notify("Categoria criada!", "success")
+      setIsCategoryModalOpen(false)
+      setNewCategoryName("")
+      fetchCategories()
+    } catch (error) {
+      notify("Erro ao criar categoria", "error")
+    }
   }
 
   const handleSave = async (e: React.FormEvent) => {
@@ -644,6 +665,19 @@ export default function PlanejamentoFinanceiro() {
           </div>
           <div className="flex items-center gap-4">
             <button
+              onClick={() => navigate("/orcamento", { state: { from: "/financeiro" } })}
+              className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors font-medium border border-slate-700"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+              <span>Ver Orçamento</span>
+            </button>
+            <button
+              onClick={() => setIsCategoryModalOpen(true)}
+              className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors font-medium border border-slate-700"
+            >
+              <span>Nova Categoria</span>
+            </button>
+            <button
               onClick={() => handleOpenModal()}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
             >
@@ -659,17 +693,29 @@ export default function PlanejamentoFinanceiro() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-slate-900/50 border border-slate-800 p-4 rounded-xl">
             <p className="text-slate-400 text-sm mb-1">Receitas</p>
-            <p className="text-2xl font-bold text-green-500">{formatCurrency(totalIncome)}</p>
+            {isLoading ? (
+              <div className="h-8 w-32 bg-slate-800 rounded animate-pulse" />
+            ) : (
+              <p className="text-2xl font-bold text-green-500">{formatCurrency(totalIncome)}</p>
+            )}
           </div>
           <div className="bg-slate-900/50 border border-slate-800 p-4 rounded-xl">
             <p className="text-slate-400 text-sm mb-1">Despesas</p>
-            <p className="text-2xl font-bold text-red-500">{formatCurrency(totalExpense)}</p>
+            {isLoading ? (
+              <div className="h-8 w-32 bg-slate-800 rounded animate-pulse" />
+            ) : (
+              <p className="text-2xl font-bold text-red-500">{formatCurrency(totalExpense)}</p>
+            )}
           </div>
           <div className="bg-slate-900/50 border border-slate-800 p-4 rounded-xl">
             <p className="text-slate-400 text-sm mb-1">Total Geral</p>
-            <p className={`text-2xl font-bold ${totalOverall >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {formatCurrency(totalOverall)}
-            </p>
+            {isLoading ? (
+              <div className="h-8 w-32 bg-slate-800 rounded animate-pulse" />
+            ) : (
+              <p className={`text-2xl font-bold ${totalOverall >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {formatCurrency(totalOverall)}
+              </p>
+            )}
           </div>
         </div>
 
@@ -1139,6 +1185,31 @@ export default function PlanejamentoFinanceiro() {
                     "Excluir"
                   )}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* New Category Modal */}
+        {isCategoryModalOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl p-6">
+              <h2 className="text-xl font-bold text-white mb-4">Nova Categoria</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Nome</label>
+                  <input
+                    type="text"
+                    value={newCategoryName}
+                    onChange={e => setNewCategoryName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setIsCategoryModalOpen(false)} className="flex-1 px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">Cancelar</button>
+                  <button onClick={handleCreateCategory} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Criar</button>
+                </div>
               </div>
             </div>
           </div>

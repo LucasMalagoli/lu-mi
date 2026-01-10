@@ -42,6 +42,18 @@ class Category(SQLModel, table=True):
     records: List["FinancialRecord"] = Relationship(back_populates="categories", link_model=FinancialRecordCategoryLink)
 
 
+class CategoryBudget(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("category_id", "user_id", "month", name="unique_category_budget_month"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    category_id: int = Field(foreign_key="category.id")
+    user_id: int = Field(foreign_key="user.id")
+    month: date
+    planned_value: float
+
+class CategoryCreate(SQLModel):
+    name: str
+
+
 class CategoryRead(SQLModel):
     id: int
     name: str
@@ -118,3 +130,8 @@ class ResolutionUpdate(SQLModel):
     description: Optional[str] = None
     target_date: Optional[date] = Field(default=None, alias="targetDate")
     status: Optional[ResolutionStatus] = None
+
+class CategoryBudgetCreate(SQLModel):
+    category_id: int
+    month: date
+    planned_value: float

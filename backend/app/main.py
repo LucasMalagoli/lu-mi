@@ -1,6 +1,7 @@
 import logging
 import asyncio
 import smtplib
+import calendar
 from email.message import EmailMessage
 from datetime import datetime, date
 from typing import Optional
@@ -21,7 +22,8 @@ from .models import (
     User, Resolution, ResolutionCreate, ResolutionUpdate,
     FinancialRecord, FinancialRecordCreate, FinancialRecordUpdate,
     FinancialRecordRead, Category, CategoryRead, TransactionType,
-    FinancialRecordStatus, FinancialRecordCategoryLink
+    FinancialRecordStatus, FinancialRecordCategoryLink,
+    CategoryBudget, CategoryBudgetCreate, CategoryCreate
 )
 from .database import init_db, get_session, engine
 
@@ -485,3 +487,163 @@ async def delete_category(
     await session.delete(category)
     await session.commit()
     return {"message": "Category deleted successfully"}
+
+
+@app.post("/budgets", response_model=CategoryBudget)
+async def set_category_budget(
+    budget_data: CategoryBudgetCreate,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    # Normalize month to 1st day
+    normalized_month = budget_data.month.replace(day=1)
+    
+    statement = select(CategoryBudget).where(
+        CategoryBudget.category_id == budget_data.category_id,
+        CategoryBudget.user_id == user.id,
+        CategoryBudget.month == normalized_month
+    )
+    result = await session.execute(statement)
+    budget = result.scalars().first()
+    
+    if budget:
+        budget.planned_value = budget_data.planned_value
+    else:
+        budget = CategoryBudget(
+            category_id=budget_data.category_id,
+            user_id=user.id,
+            month=normalized_month,
+            planned_value=budget_data.planned_value
+        )
+        session.add(budget)
+    
+    await session.commit()
+    await session.refresh(budget)
+    return budget
+
+
+class BudgetSummaryItem(BaseModel):
+    category_id: int
+    category_name: str
+    planned: float
+    confirmed: float
+    expected: float
+
+
+@app.get("/budgets/summary", response_model=list[BudgetSummaryItem])
+async def get_budget_summary(
+    month: date,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    start_date = month.replace(day=1)
+    last_day = calendar.monthrange(start_date.year, start_date.month)[1]
+    end_date = start_date.replace(day=last_day)
+    
+    cat_stmt = select(Category).where(Category.user_id == user.id)
+    cat_result = await session.execute(cat_stmt)
+    categories = cat_result.scalars().all()
+    
+    bud_stmt = select(CategoryBudget).where(
+        CategoryBudget.user_id == user.id,
+        CategoryBudget.month == start_date
+    )
+    bud_result = await session.execute(bud_stmt)
+    budgets = {b.category_id: b.planned_value for b in bud_result.scalars().all()}
+    
+    rec_stmt = select(FinancialRecord).where(
+        FinancialRecord.user_id == user.id,
+        FinancialRecord.bill_date >= start_date,
+        FinancialRecord.bill_date <= end_date
+    ).options(selectinload(FinancialRecord.categories))
+    rec_result = await session.execute(rec_stmt)
+    records = rec_result.scalars().all()
+    
+    cat_stats = {c.id: {"confirmed": 0.0, "expected": 0.0} for c in categories}
+    for record in records:
+        val = -record.value if record.type == TransactionType.EXPENSE else record.value
+        is_confirmed = record.status == FinancialRecordStatus.COMPLETED
+        for cat in record.categories:
+            if cat.id in cat_stats:
+                if is_confirmed:
+                    cat_stats[cat.id]["confirmed"] += val
+                cat_stats[cat.id]["expected"] += val
+                
+    return [
+        {
+            "category_id": cat.id,
+            "category_name": cat.name,
+            "planned": budgets.get(cat.id, 0.0),
+            "confirmed": cat_stats[cat.id]["confirmed"],
+            "expected": cat_stats[cat.id]["expected"]
+        }
+        for cat in categories
+    ]
+
+
+@app.post("/categories", response_model=CategoryRead)
+async def create_category(
+    category_data: CategoryCreate,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(Category).where(Category.name == category_data.name, Category.user_id == user.id)
+    result = await session.execute(statement)
+    if result.scalars().first():
+        raise HTTPException(status_code=400, detail="Category already exists")
+    
+    category = Category(name=category_data.name, user_id=user.id)
+    session.add(category)
+    await session.commit()
+    await session.refresh(category)
+    return category
+
+
+class CopyBudgetRequest(BaseModel):
+    source_month: date
+    target_month: date
+    category_id: Optional[int] = None
+
+
+@app.post("/budgets/copy")
+async def copy_budgets(
+    data: CopyBudgetRequest,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    source_date = data.source_month.replace(day=1)
+    target_date = data.target_month.replace(day=1)
+    
+    query = select(CategoryBudget).where(
+        CategoryBudget.user_id == user.id,
+        CategoryBudget.month == source_date
+    )
+    if data.category_id:
+        query = query.where(CategoryBudget.category_id == data.category_id)
+        
+    result = await session.execute(query)
+    source_budgets = result.scalars().all()
+    
+    copied_count = 0
+    for src in source_budgets:
+        stmt = select(CategoryBudget).where(
+            CategoryBudget.user_id == user.id,
+            CategoryBudget.category_id == src.category_id,
+            CategoryBudget.month == target_date
+        )
+        existing = (await session.execute(stmt)).scalars().first()
+        
+        if existing:
+            existing.planned_value = src.planned_value
+        else:
+            new_budget = CategoryBudget(
+                category_id=src.category_id,
+                user_id=user.id,
+                month=target_date,
+                planned_value=src.planned_value
+            )
+            session.add(new_budget)
+        copied_count += 1
+        
+    await session.commit()
+    return {"message": f"Copied {copied_count} budgets"}
