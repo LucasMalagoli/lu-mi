@@ -41,7 +41,7 @@ const PROGRESS_SEGMENTS = [
   { keys: ['r3'],                  color: '#EF9F27', label: '3 dias' },
   { keys: ['r7'],                  color: '#BA7517', label: '7 dias' },
   { keys: ['r14'],                 color: '#1D9E75', label: '14 dias' },
-  { keys: ['r30'],                 color: '#378ADD', label: '30 dias' },
+  { keys: ['r30'],                 color: '#06b6d4', label: '30 dias' },
   { keys: ['realizar', 'gabarito'],color: '#D4537E', label: 'Simulado' },
   { keys: ['ok'],                  color: '#a855f7', label: 'Rev/Noc' },
 ]
@@ -51,7 +51,7 @@ const REV_OFFSETS = [
   { key: 'r3',  label: '3 dias',  color: '#EF9F27' },
   { key: 'r7',  label: '7 dias',  color: '#BA7517' },
   { key: 'r14', label: '14 dias', color: '#1D9E75' },
-  { key: 'r30', label: '30 dias', color: '#378ADD' },
+  { key: 'r30', label: '30 dias', color: '#06b6d4' },
 ]
 
 function fmtDate(iso: string | null) {
