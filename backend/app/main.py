@@ -613,14 +613,17 @@ _REV_COLORS = {1: '#E24B4A', 3: '#EF9F27', 7: '#BA7517', 14: '#1D9E75', 30: '#37
 _REV_LABELS = {1: 'Revisão 24h', 3: 'Revisão 3 dias', 7: 'Revisão 7 dias', 14: 'Revisão 14 dias', 30: 'Revisão 30 dias'}
 
 
-def _build_checks(day_type: str, study_date: Optional[date]) -> list[dict]:
+def _build_checks(day_type: str, study_date: Optional[date], topics: list[str] = []) -> list[dict]:
     if day_type == 'study':
-        items = [{'key': 'estudo', 'label': 'Estudado', 'color': None, 'order': 0}]
+        items = []
+        for i, label in enumerate(topics):
+            items.append({'key': 'estudo', 'label': label, 'color': None, 'order': i})
+        start = len(topics)
         for i, r in enumerate([1, 3, 7, 14, 30]):
-            label = _REV_LABELS[r]
+            rev_label = _REV_LABELS[r]
             if study_date:
-                label += f" — {(study_date + timedelta(days=r)).strftime('%d/%m')}"
-            items.append({'key': f'r{r}', 'label': label, 'color': _REV_COLORS[r], 'order': i + 1})
+                rev_label += f" — {(study_date + timedelta(days=r)).strftime('%d/%m')}"
+            items.append({'key': f'r{r}', 'label': rev_label, 'color': _REV_COLORS[r], 'order': start + i + 1})
         return items
     if day_type == 'sim':
         return [
@@ -746,7 +749,8 @@ async def create_cronograma_day(
     for i, label in enumerate(data.topics):
         session.add(CronogramaTopic(day_id=day.id, label=label, order=i))
 
-    for c in _build_checks(data.type, data.study_date):
+    topics_for_checks = data.topics if data.type == 'study' else []
+    for c in _build_checks(data.type, data.study_date, topics_for_checks):
         session.add(CronogramaCheck(day_id=day.id, **c))
 
     await session.commit()
@@ -815,11 +819,44 @@ async def import_cronograma(
         await session.flush()
         for i, label in enumerate(item.topics):
             session.add(CronogramaTopic(day_id=day.id, label=label, order=i))
-        for c in _build_checks(item.type, study_date):
+        topics_for_checks = item.topics if item.type == 'study' else []
+        for c in _build_checks(item.type, study_date, topics_for_checks):
             session.add(CronogramaCheck(day_id=day.id, **c))
 
     await session.commit()
     return {"message": f"Imported {len(payload.days)} days"}
+
+
+@app.post("/cronograma/migrate-per-topic-checks")
+async def migrate_per_topic_checks(
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    """Migrate study days from single 'estudo' check to one check per topic."""
+    study_days = (await session.execute(
+        select(CronogramaDay)
+        .where(CronogramaDay.type == 'study')
+        .options(selectinload(CronogramaDay.topics), selectinload(CronogramaDay.checks))
+    )).scalars().all()
+
+    migrated = 0
+    for day in study_days:
+        estudo_checks = [c for c in day.checks if c.key == 'estudo']
+        topics = sorted(day.topics, key=lambda t: t.order)
+        if len(estudo_checks) == len(topics):
+            continue
+        was_checked = estudo_checks[0].is_checked if estudo_checks else False
+        for c in estudo_checks:
+            await session.delete(c)
+        for i, topic in enumerate(topics):
+            session.add(CronogramaCheck(
+                day_id=day.id, key='estudo', label=topic.label,
+                color=None, order=i, is_checked=was_checked,
+            ))
+        migrated += 1
+
+    await session.commit()
+    return {"migrated": migrated}
 
 
 class CronogramaDayUpdate(BaseModel):
@@ -857,8 +894,10 @@ async def update_cronograma_day(
     type_changed = day.type != old_type
     date_changed = day.study_date != old_date
 
+    topics_changed = data.topics is not None
+
     # Replace topics when explicitly provided or when type changed
-    if data.topics is not None or type_changed:
+    if topics_changed or type_changed:
         for t in (await session.execute(select(CronogramaTopic).where(CronogramaTopic.day_id == day_id))).scalars().all():
             await session.delete(t)
         if day.type == 'study' and data.topics:
@@ -866,14 +905,24 @@ async def update_cronograma_day(
                 if label.strip():
                     session.add(CronogramaTopic(day_id=day.id, label=label, order=i))
 
-    # Rebuild checks when type or date changed, preserving is_checked for same keys
-    if type_changed or date_changed:
+    # Rebuild checks when type, date, or topics changed
+    if type_changed or date_changed or topics_changed:
         existing = (await session.execute(select(CronogramaCheck).where(CronogramaCheck.day_id == day_id))).scalars().all()
-        prev_state = {c.key: c.is_checked for c in existing}
+        prev_rev_state = {c.key: c.is_checked for c in existing if c.key != 'estudo'}
         for c in existing:
             await session.delete(c)
-        for c_data in _build_checks(day.type, day.study_date):
-            is_checked = prev_state.get(c_data['key'], False) if not type_changed else False
+        if day.type == 'study':
+            if data.topics is not None:
+                final_topics = [t for t in data.topics if t.strip()]
+            else:
+                final_topics_rows = (await session.execute(
+                    select(CronogramaTopic).where(CronogramaTopic.day_id == day_id).order_by(CronogramaTopic.order)
+                )).scalars().all()
+                final_topics = [t.label for t in final_topics_rows]
+        else:
+            final_topics = []
+        for c_data in _build_checks(day.type, day.study_date, final_topics):
+            is_checked = prev_rev_state.get(c_data['key'], False) if not type_changed else False
             session.add(CronogramaCheck(day_id=day.id, is_checked=is_checked, **c_data))
 
     await session.commit()

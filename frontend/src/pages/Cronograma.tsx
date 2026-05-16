@@ -537,8 +537,9 @@ function DayCard({ day, isDone, onToggle, onDelete, onEdit }: {
   onEdit: (day: Day) => void
 }) {
   const [hovered, setHovered] = useState(false)
-  const estudoCheck = day.checks.find(c => c.key === 'estudo')
+  const estudoChecks = day.checks.filter(c => c.key === 'estudo').sort((a, b) => a.order - b.order)
   const revChecks = day.checks.filter(c => c.key !== 'estudo')
+  const sortedTopics = [...day.topics].sort((a, b) => a.order - b.order)
 
   const cardBorder = day.type === 'prova'
     ? 'border-violet-500/60'
@@ -574,16 +575,24 @@ function DayCard({ day, isDone, onToggle, onDelete, onEdit }: {
       </div>
 
       {/* Study: topics + reviews */}
-      {day.type === 'study' && estudoCheck && (
+      {day.type === 'study' && sortedTopics.length > 0 && (
         <>
           <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Conteúdo</p>
           <ul className="space-y-1.5 mb-3">
-            {day.topics.map(t => (
-              <li key={t.id} className="flex items-start gap-2 cursor-pointer" onClick={() => onToggle(estudoCheck.id)}>
-                <Checkbox checked={estudoCheck.is_checked} color="#3b82f6" onClick={() => onToggle(estudoCheck.id)} />
-                <span className={`text-xs leading-snug ${estudoCheck.is_checked ? 'text-slate-600 line-through' : 'text-slate-300'}`}>{t.label}</span>
-              </li>
-            ))}
+            {sortedTopics.map((t, i) => {
+              const check = estudoChecks[i]
+              if (!check) return (
+                <li key={t.id} className="flex items-start gap-2">
+                  <span className="text-xs leading-snug text-slate-300">{t.label}</span>
+                </li>
+              )
+              return (
+                <li key={t.id} className="flex items-start gap-2 cursor-pointer" onClick={() => onToggle(check.id)}>
+                  <Checkbox checked={check.is_checked} color="#3b82f6" onClick={() => onToggle(check.id)} />
+                  <span className={`text-xs leading-snug ${check.is_checked ? 'text-slate-600 line-through' : 'text-slate-300'}`}>{t.label}</span>
+                </li>
+              )
+            })}
           </ul>
           {revChecks.length > 0 && (
             <>
