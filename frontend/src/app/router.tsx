@@ -9,6 +9,7 @@ import Settings from '../pages/Settings'
 import AppLayout from '../components/layout/AppLayout'
 import ProtectedRoute from '../routes/ProtectedRoute'
 import Orcamento from '../pages/Orcamento'
+import Cronograma from '../pages/Cronograma'
 
 export const router = createBrowserRouter([
   {
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
           { path: '/orcamento', element: <Orcamento /> },
           { path: '/financeiro', element: <PlanejamentoFinanceiro /> },
           { path: '/configuracoes', element: <Settings /> },
+          { path: '/cronograma', element: <Cronograma /> },
         ],
       },
     ],

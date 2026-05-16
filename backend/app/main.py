@@ -1,7 +1,7 @@
 import logging
 import calendar
-from datetime import datetime, date
-from typing import Optional
+from datetime import datetime, date, timedelta
+from typing import Optional, List
 
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -20,7 +20,8 @@ from .models import (
     FinancialRecord, FinancialRecordCreate, FinancialRecordUpdate,
     FinancialRecordRead, Category, CategoryRead, TransactionType,
     FinancialRecordStatus, FinancialRecordCategoryLink,
-    CategoryBudget, CategoryBudgetCreate, CategoryCreate
+    CategoryBudget, CategoryBudgetCreate, CategoryCreate,
+    CronogramaDay, CronogramaTopic, CronogramaCheck,
 )
 from .database import init_db, get_session
 
@@ -603,3 +604,277 @@ async def copy_budgets(
         
     await session.commit()
     return {"message": f"Copied {copied_count} budgets"}
+
+
+# ── Cronograma ────────────────────────────────────────────────────────────────
+
+_CRONOGRAMA_START = date(2025, 5, 5)
+_REV_COLORS = {1: '#E24B4A', 3: '#EF9F27', 7: '#BA7517', 14: '#1D9E75', 30: '#378ADD'}
+_REV_LABELS = {1: 'Revisão 24h', 3: 'Revisão 3 dias', 7: 'Revisão 7 dias', 14: 'Revisão 14 dias', 30: 'Revisão 30 dias'}
+
+
+def _build_checks(day_type: str, study_date: Optional[date]) -> list[dict]:
+    if day_type == 'study':
+        items = [{'key': 'estudo', 'label': 'Estudado', 'color': None, 'order': 0}]
+        for i, r in enumerate([1, 3, 7, 14, 30]):
+            label = _REV_LABELS[r]
+            if study_date:
+                label += f" — {(study_date + timedelta(days=r)).strftime('%d/%m')}"
+            items.append({'key': f'r{r}', 'label': label, 'color': _REV_COLORS[r], 'order': i + 1})
+        return items
+    if day_type == 'sim':
+        return [
+            {'key': 'realizar', 'label': 'Realizar o simulado', 'color': None, 'order': 0},
+            {'key': 'gabarito', 'label': 'Revisar gabarito e pontos fracos', 'color': None, 'order': 1},
+        ]
+    if day_type in ('rev', 'noc'):
+        return [{'key': 'ok', 'label': 'Concluído', 'color': None, 'order': 0}]
+    return []
+
+
+class CronogramaTopicRead(BaseModel):
+    id: int
+    label: str
+    order: int
+
+
+class CronogramaCheckRead(BaseModel):
+    id: int
+    key: str
+    label: str
+    color: Optional[str]
+    is_checked: bool
+    order: int
+
+
+class CronogramaDayRead(BaseModel):
+    id: int
+    day_number: int
+    week_number: int
+    type: str
+    mat: str
+    study_date: Optional[date]
+    topics: List[CronogramaTopicRead]
+    checks: List[CronogramaCheckRead]
+
+
+class CronogramaDayCreate(BaseModel):
+    day_number: int
+    week_number: int
+    type: str
+    mat: str
+    study_date: Optional[date] = None
+    topics: List[str] = []
+
+
+class CronogramaImportItem(BaseModel):
+    d: int
+    w: int
+    type: str
+    mat: str
+    study_date: Optional[str] = None
+    topics: List[str] = []
+
+
+class CronogramaImportPayload(BaseModel):
+    days: List[CronogramaImportItem]
+
+
+async def _load_day(session: AsyncSession, day_id: int) -> CronogramaDayRead:
+    stmt = (
+        select(CronogramaDay)
+        .where(CronogramaDay.id == day_id)
+        .options(selectinload(CronogramaDay.topics), selectinload(CronogramaDay.checks))
+    )
+    result = await session.execute(stmt)
+    row = result.scalars().first()
+    return CronogramaDayRead(
+        id=row.id,
+        day_number=row.day_number,
+        week_number=row.week_number,
+        type=row.type,
+        mat=row.mat,
+        study_date=row.study_date,
+        topics=[CronogramaTopicRead(id=t.id, label=t.label, order=t.order) for t in sorted(row.topics, key=lambda x: x.order)],
+        checks=[CronogramaCheckRead(id=c.id, key=c.key, label=c.label, color=c.color, is_checked=c.is_checked, order=c.order) for c in sorted(row.checks, key=lambda x: x.order)],
+    )
+
+
+@app.get("/cronograma/days", response_model=List[CronogramaDayRead])
+async def get_cronograma_days(
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    stmt = (
+        select(CronogramaDay)
+        .options(selectinload(CronogramaDay.topics), selectinload(CronogramaDay.checks))
+        .order_by(CronogramaDay.study_date, CronogramaDay.day_number)
+    )
+    result = await session.execute(stmt)
+    rows = result.scalars().all()
+    return [
+        CronogramaDayRead(
+            id=r.id,
+            day_number=r.day_number,
+            week_number=r.week_number,
+            type=r.type,
+            mat=r.mat,
+            study_date=r.study_date,
+            topics=[CronogramaTopicRead(id=t.id, label=t.label, order=t.order) for t in sorted(r.topics, key=lambda x: x.order)],
+            checks=[CronogramaCheckRead(id=c.id, key=c.key, label=c.label, color=c.color, is_checked=c.is_checked, order=c.order) for c in sorted(r.checks, key=lambda x: x.order)],
+        )
+        for r in rows
+    ]
+
+
+@app.post("/cronograma/days", response_model=CronogramaDayRead, status_code=201)
+async def create_cronograma_day(
+    data: CronogramaDayCreate,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    day = CronogramaDay(
+        day_number=data.day_number,
+        week_number=data.week_number,
+        type=data.type,
+        mat=data.mat,
+        study_date=data.study_date,
+    )
+    session.add(day)
+    await session.flush()
+
+    for i, label in enumerate(data.topics):
+        session.add(CronogramaTopic(day_id=day.id, label=label, order=i))
+
+    for c in _build_checks(data.type, data.study_date):
+        session.add(CronogramaCheck(day_id=day.id, **c))
+
+    await session.commit()
+    return await _load_day(session, day.id)
+
+
+@app.delete("/cronograma/days/{day_id}")
+async def delete_cronograma_day(
+    day_id: int,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    checks = (await session.execute(select(CronogramaCheck).where(CronogramaCheck.day_id == day_id))).scalars().all()
+    for c in checks:
+        await session.delete(c)
+    topics = (await session.execute(select(CronogramaTopic).where(CronogramaTopic.day_id == day_id))).scalars().all()
+    for t in topics:
+        await session.delete(t)
+    day = (await session.execute(select(CronogramaDay).where(CronogramaDay.id == day_id))).scalars().first()
+    if not day:
+        raise HTTPException(status_code=404)
+    await session.delete(day)
+    await session.commit()
+    return {"message": "Deleted"}
+
+
+@app.patch("/cronograma/checks/{check_id}/toggle", response_model=CronogramaCheckRead)
+async def toggle_cronograma_check(
+    check_id: int,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    check = (await session.execute(select(CronogramaCheck).where(CronogramaCheck.id == check_id))).scalars().first()
+    if not check:
+        raise HTTPException(status_code=404)
+    check.is_checked = not check.is_checked
+    session.add(check)
+    await session.commit()
+    await session.refresh(check)
+    return CronogramaCheckRead(
+        id=check.id, key=check.key, label=check.label,
+        color=check.color, is_checked=check.is_checked, order=check.order,
+    )
+
+
+@app.post("/cronograma/import", status_code=201)
+async def import_cronograma(
+    payload: CronogramaImportPayload,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    count = (await session.execute(select(func.count()).select_from(CronogramaDay))).scalar_one()
+    if count > 0:
+        raise HTTPException(status_code=400, detail="Cronograma already has data")
+
+    for item in payload.days:
+        study_date = date.fromisoformat(item.study_date) if item.study_date else None
+        day = CronogramaDay(
+            day_number=item.d,
+            week_number=item.w,
+            type=item.type,
+            mat=item.mat,
+            study_date=study_date,
+        )
+        session.add(day)
+        await session.flush()
+        for i, label in enumerate(item.topics):
+            session.add(CronogramaTopic(day_id=day.id, label=label, order=i))
+        for c in _build_checks(item.type, study_date):
+            session.add(CronogramaCheck(day_id=day.id, **c))
+
+    await session.commit()
+    return {"message": f"Imported {len(payload.days)} days"}
+
+
+class CronogramaDayUpdate(BaseModel):
+    mat: Optional[str] = None
+    type: Optional[str] = None
+    study_date: Optional[date] = None
+    topics: Optional[List[str]] = None
+
+
+@app.patch("/cronograma/days/{day_id}", response_model=CronogramaDayRead)
+async def update_cronograma_day(
+    day_id: int,
+    data: CronogramaDayUpdate,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    day = (await session.execute(select(CronogramaDay).where(CronogramaDay.id == day_id))).scalars().first()
+    if not day:
+        raise HTTPException(status_code=404)
+
+    old_type = day.type
+    old_date = day.study_date
+
+    if data.mat is not None:
+        day.mat = data.mat
+    if data.type is not None:
+        day.type = data.type
+    if data.study_date is not None:
+        day.study_date = data.study_date
+        day.week_number = max(1, (day.study_date - _CRONOGRAMA_START).days // 7 + 1)
+
+    session.add(day)
+    await session.flush()
+
+    type_changed = day.type != old_type
+    date_changed = day.study_date != old_date
+
+    # Replace topics when explicitly provided or when type changed
+    if data.topics is not None or type_changed:
+        for t in (await session.execute(select(CronogramaTopic).where(CronogramaTopic.day_id == day_id))).scalars().all():
+            await session.delete(t)
+        if day.type == 'study' and data.topics:
+            for i, label in enumerate(data.topics):
+                if label.strip():
+                    session.add(CronogramaTopic(day_id=day.id, label=label, order=i))
+
+    # Rebuild checks when type or date changed, preserving is_checked for same keys
+    if type_changed or date_changed:
+        existing = (await session.execute(select(CronogramaCheck).where(CronogramaCheck.day_id == day_id))).scalars().all()
+        prev_state = {c.key: c.is_checked for c in existing}
+        for c in existing:
+            await session.delete(c)
+        for c_data in _build_checks(day.type, day.study_date):
+            is_checked = prev_state.get(c_data['key'], False) if not type_changed else False
+            session.add(CronogramaCheck(day_id=day.id, is_checked=is_checked, **c_data))
+
+    await session.commit()
+    return await _load_day(session, day.id)

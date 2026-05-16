@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cronograma OAB 47 · 115 dias</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f4f0; color: #1a1a1a; }
+  .hdr { background: #fff; padding: 1.25rem 1.5rem 1rem; border-bottom: 1px solid #e0ddd6; }
+  .hdr h1 { font-size: 20px; font-weight: 600; color: #1a1a1a; }
+  .hdr p { font-size: 12px; color: #777; margin-top: 3px; }
+  .pbar-wrap { background: #fff; padding: 8px 1.5rem 10px; border-bottom: 1px solid #e0ddd6; }
+  .pbar-bg { height: 6px; background: #e0ddd6; border-radius: 3px; overflow: hidden; }
+  .pbar-fill { height: 100%; background: #7F77DD; border-radius: 3px; transition: width 0.3s; }
+  .pbar-lbl { font-size: 11px; color: #888; text-align: right; padding-top: 4px; }
+  .legend { background: #fff; display: flex; gap: 12px; flex-wrap: wrap; padding: 8px 1.5rem; border-bottom: 1px solid #e0ddd6; }
+  .leg-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #666; }
+  .leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .ctrls { background: #fff; display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 1.5rem; border-bottom: 1px solid #e0ddd6; position: sticky; top: 0; z-index: 10; }
+  .fbtn { font-size: 11px; padding: 4px 10px; border-radius: 14px; border: 1px solid #d0cdc6; background: #fff; color: #666; cursor: pointer; transition: all 0.15s; }
+  .fbtn:hover { border-color: #7F77DD; color: #3C3489; }
+  .fbtn.on { border-color: #7F77DD; background: #EEEDFE; color: #3C3489; font-weight: 600; }
+  .weeks { padding: 1rem 1.5rem 3rem; max-width: 1200px; margin: 0 auto; }
+  .wblk { margin-bottom: 2rem; }
+  .wtitle { font-size: 11px; font-weight: 600; color: #888; letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 0 8px; }
+  .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+  .dcard { background: #fff; border: 1px solid #e0ddd6; border-radius: 12px; padding: 12px 14px; transition: border-color 0.15s; }
+  .dcard:hover { border-color: #b0add6; }
+  .dcard.done { background: #f9f8f5; border-color: #e0ddd6; }
+  .dcard.done .dsubj { color: #999; }
+  .dhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; }
+  .dnum { font-size: 10px; font-weight: 600; color: #888; }
+  .ddate { font-size: 10px; color: #aaa; }
+  .dsubj { font-size: 13px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px; line-height: 1.3; }
+  .sec-lbl { font-size: 10px; font-weight: 600; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em; margin: 8px 0 4px; }
+  .items { list-style: none; }
+  .item { display: flex; align-items: flex-start; gap: 7px; padding: 3px 0; cursor: pointer; user-select: none; }
+  .item:hover .itxt { color: #1a1a1a; }
+  .cb { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid #ccc; background: #fff; flex-shrink: 0; margin-top: 1px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .cb.chk { background: #7F77DD; border-color: #7F77DD; }
+  .cb.chk::after { content: ''; display: block; width: 8px; height: 5px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translateY(-1px); }
+  .itxt { font-size: 12px; color: #555; line-height: 1.4; }
+  .rev-itxt { font-size: 12px; line-height: 1.4; }
+  .divider { height: 1px; background: #f0ede8; margin: 8px 0; }
+  .tag-sim { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #F4C0D1; color: #4B1528; font-weight: 600; margin-bottom: 6px; }
+  .tag-rev { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #E1F5EE; color: #085041; font-weight: 600; margin-bottom: 6px; }
+  .tag-noc { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #FAEEDA; color: #412402; font-weight: 600; margin-bottom: 6px; }
+  .tag-prova { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #7F77DD; color: #fff; font-weight: 600; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1>Cronograma OAB 47 · 115 dias</h1>
+  <p>05 de maio → 27 de agosto de 2025 &nbsp;·&nbsp; Método VDE · 1ª Fase &nbsp;·&nbsp; Revisões: D+1 · D+3 · D+7 · D+14 · D+30</p>
+</div>
+
+<div class="pbar-wrap">
+  <div class="pbar-bg"><div class="pbar-fill" id="pb" style="width:0%"></div></div>
+  <div class="pbar-lbl" id="pl">0 / 0 concluídos (0%)</div>
+</div>
+
+<div class="legend">
+  <div class="leg-item"><div class="leg-dot" style="background:#7F77DD"></div> Estudo</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#E24B4A"></div> Revisão 24h</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#EF9F27"></div> Revisão 3 dias</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#BA7517"></div> Revisão 7 dias</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#1D9E75"></div> Revisão 14 dias</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#378ADD"></div> Revisão 30 dias</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#D4537E"></div> Simulado</div>
+</div>
+
+<div class="ctrls" id="ctrls"></div>
+<div class="weeks" id="wc"></div>
+
+<script>
+const START = new Date(2025, 4, 5);
+
+function dayDate(n) {
+  const d = new Date(START);
+  d.setDate(d.getDate() + n - 1);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = ['jan','fev','mar','abr','mai','jun','jul','ago'][d.getMonth()];
+  return `${dd}/${mm}`;
+}
+
+function addDays(n, plus) { return dayDate(n + plus); }
+
+const REV_COLORS = { 1: '#E24B4A', 3: '#EF9F27', 7: '#BA7517', 14: '#1D9E75', 30: '#378ADD' };
+const REV_LABELS = { 1: 'Revisão 24h', 3: 'Revisão 3 dias', 7: 'Revisão 7 dias', 14: 'Revisão 14 dias', 30: 'Revisão 30 dias' };
+
+const DAYS = [
+  {d:1,w:1,type:'study',mat:'Constitucional',topics:['Teoria da Constituição','Direitos e Garantias Fundamentais']},
+  {d:2,w:1,type:'study',mat:'Penal',topics:['Eficácia da Lei Penal no Tempo e no Espaço','Fato Típico']},
+  {d:3,w:1,type:'study',mat:'Trabalho',topics:['Relação de Trabalho','Contrato de Trabalho']},
+  {d:4,w:1,type:'study',mat:'Civil',topics:['Parte Geral: Pessoas Naturais','Parte Geral: Pessoas Jurídicas']},
+  {d:5,w:1,type:'study',mat:'Tributário',topics:['Princípios Tributários','Competência Tributária']},
+  {d:6,w:1,type:'study',mat:'Processo do Trabalho',topics:['Competência','Atos, Termos e Prazos Processuais']},
+  {d:7,w:1,type:'study',mat:'Processo Penal',topics:['Inquérito Policial','Ação Penal']},
+  {d:8,w:2,type:'study',mat:'Ética',topics:['Atividades da Advocacia e Mandato Judicial','Inscrição na OAB e Estagiário']},
+  {d:9,w:2,type:'study',mat:'Processo Civil',topics:['Atos Processuais','Das Partes e dos Procuradores']},
+  {d:10,w:2,type:'study',mat:'Constitucional',topics:['Remédios Constitucionais','Nacionalidade']},
+  {d:11,w:2,type:'study',mat:'Empresarial',topics:['Empresa e Empresário','Estabelecimento Empresarial e Registro']},
+  {d:12,w:2,type:'study',mat:'Administrativo',topics:['Poderes da Administração Pública','Princípios da Administração Pública']},
+  {d:13,w:2,type:'study',mat:'Penal',topics:['Ilicitude','Culpabilidade']},
+  {d:14,w:2,type:'study',mat:'Civil',topics:['Negócio Jurídico','Modalidades de Obrigações']},
+  {d:15,w:3,type:'study',mat:'Trabalho',topics:['Empregado','Empregador']},
+  {d:16,w:3,type:'study',mat:'Tributário',topics:['Imunidades Tributárias','Conceito e Espécies Tributárias']},
+  {d:17,w:3,type:'study',mat:'Ética',topics:['Direitos e Prerrogativas dos Advogados','Honorários Advocatícios']},
+  {d:18,w:3,type:'study',mat:'Processo do Trabalho',topics:['Despesas Processuais','Ação Trabalhista e Defesa do Réu']},
+  {d:19,w:3,type:'study',mat:'Processo Civil',topics:['Intervenção de Terceiros e Litisconsórcio','Tutela Provisória']},
+  {d:20,w:3,type:'study',mat:'Constitucional',topics:['Organização do Estado e Entes Federativos','Repartição de Competência']},
+  {d:21,w:3,type:'study',mat:'Penal',topics:['Das Penas','Concurso de Crimes']},
+  {d:22,w:4,type:'study',mat:'Trabalho',topics:['Interrupção e Suspensão do Contrato','Alteração do Contrato de Trabalho']},
+  {d:23,w:4,type:'study',mat:'Processo Penal',topics:['Competência','Questões e Processos Incidentes']},
+  {d:24,w:4,type:'study',mat:'Administrativo',topics:['Atos Administrativos','Organização da Administração Pública']},
+  {d:25,w:4,type:'study',mat:'Civil',topics:['Contratos em Geral','Contratos em Espécie']},
+  {d:26,w:4,type:'study',mat:'Tributário',topics:['Obrigação Tributária','Responsabilidade Tributária']},
+  {d:27,w:4,type:'study',mat:'Constitucional',topics:['Intervenção Federal','Poder Legislativo']},
+  {d:28,w:4,type:'study',mat:'Ética',topics:['Sociedade de Advogados e Advogado Empregado','Incompatibilidades e Impedimentos']},
+  {d:29,w:5,type:'study',mat:'Penal',topics:['Extinção da Punibilidade','Concurso de Pessoas']},
+  {d:30,w:5,type:'study',mat:'Processo Civil',topics:['Procedimento Comum','Sentença e Coisa Julgada']},
+  {d:31,w:5,type:'study',mat:'Empresarial',topics:['Direito Societário','Títulos de Crédito']},
+  {d:32,w:5,type:'study',mat:'Administrativo',topics:['Agentes Públicos','Improbidade Administrativa']},
+  {d:33,w:5,type:'study',mat:'Constitucional',topics:['Processo Legislativo','Poder Executivo']},
+  {d:34,w:5,type:'sim',mat:'Simulado OAB 37'},
+  {d:35,w:5,type:'study',mat:'Trabalho',topics:['Duração do Contrato de Trabalho','Estabilidade']},
+  {d:36,w:6,type:'study',mat:'Civil',topics:['Responsabilidade Civil','Família: Direito Pessoal']},
+  {d:37,w:6,type:'study',mat:'Processo Penal',topics:['Prisão, Medidas Cautelares e Liberdade Provisória','Citação e Intimação']},
+  {d:38,w:6,type:'study',mat:'Tributário',topics:['Suspensão, Extinção e Exclusão do Crédito','Execução Fiscal']},
+  {d:39,w:6,type:'study',mat:'Processo do Trabalho',topics:['Audiência Trabalhista','Provas']},
+  {d:40,w:6,type:'study',mat:'Administrativo',topics:['Intervenção do Estado na Propriedade','Responsabilidade Civil do Estado']},
+  {d:41,w:6,type:'study',mat:'Previdenciário',topics:['Seguridade Social e Princípios Constitucionais','Beneficiários do RGPS e Qualidade de Segurado']},
+  {d:42,w:6,type:'study',mat:'Penal',topics:['Crimes contra a Vida','Crimes Contra a Honra']},
+  {d:43,w:7,type:'study',mat:'Eleitoral',topics:['Direitos Políticos','Partidos Políticos']},
+  {d:44,w:7,type:'study',mat:'ECA',topics:['Direitos Fundamentais','Família Substituta: Guarda, Tutela e Adoção']},
+  {d:45,w:7,type:'study',mat:'Consumidor',topics:['Política Nacional das Relações de Consumo','Direitos Básicos do Consumidor']},
+  {d:46,w:7,type:'study',mat:'Civil',topics:['Família: Direito Patrimonial','Direitos Reais: Posse']},
+  {d:47,w:7,type:'study',mat:'Processo Civil',topics:['Cumprimento de Sentença e Proc. de Execução','Procedimentos Especiais']},
+  {d:48,w:7,type:'study',mat:'Processo Penal',topics:['Provas','Procedimentos no CPP']},
+  {d:49,w:7,type:'study',mat:'Previdenciário',topics:['Carência, Salário de Contribuição e RMI','Benefícios e Aposentadoria em Espécie']},
+  {d:50,w:8,type:'study',mat:'Constitucional',topics:['Poder Judiciário','Controle de Constitucionalidade']},
+  {d:51,w:8,type:'study',mat:'Penal',topics:['Crimes Contra o Patrimônio','Crimes contra a Administração Pública']},
+  {d:52,w:8,type:'study',mat:'Tributário',topics:['Impostos Federais, Estaduais e Municipais']},
+  {d:53,w:8,type:'study',mat:'Trabalho',topics:['Extinção do Contrato de Trabalho','Remuneração']},
+  {d:54,w:8,type:'study',mat:'Administrativo',topics:['Licitações e Contratos Administrativos','Serviços Públicos e PPP']},
+  {d:55,w:8,type:'sim',mat:'Simulado OAB 38'},
+  {d:56,w:9,type:'study',mat:'Civil',topics:['Direitos Reais: Propriedade','Sucessões: Sucessão em Geral']},
+  {d:57,w:9,type:'study',mat:'Ética',topics:['Processo Administrativo Disciplinar','Estrutura da OAB e Eleições']},
+  {d:58,w:9,type:'study',mat:'Processo Penal',topics:['Nulidades no Processo Penal','Recursos e Ações Autônomas']},
+  {d:59,w:9,type:'study',mat:'Empresarial',topics:['Falência e Recuperação Judicial']},
+  {d:60,w:9,type:'study',mat:'Processo do Trabalho',topics:['Recursos','Execução']},
+  {d:61,w:9,type:'study',mat:'Consumidor',topics:['Responsabilidade Civil nas Relações de Consumo','Proteção Contratual']},
+  {d:62,w:9,type:'study',mat:'ECA',topics:['Prevenção','Tutela Jurisdicional da Criança e do Adolescente']},
+  {d:63,w:10,type:'study',mat:'Penal',topics:['Crimes contra a Dignidade Sexual','Crimes contra a Fé Pública']},
+  {d:64,w:10,type:'study',mat:'Constitucional',topics:['Defesa do Estado','Ordem Social']},
+  {d:65,w:10,type:'study',mat:'Processo Civil',topics:['Recursos e Ações Autônomas de Impugnação']},
+  {d:66,w:10,type:'study',mat:'Civil',topics:['Sucessão Legítima','Sucessão Testamentária']},
+  {d:67,w:10,type:'study',mat:'Tributário',topics:['Impostos Federais, Estaduais e Municipais II']},
+  {d:68,w:10,type:'study',mat:'Ética',topics:['Publicidade Profissional','Sigilo Profissional']},
+  {d:69,w:10,type:'study',mat:'ECA',topics:['Ato Infracional e Medidas Socioeducativas','Crimes e Infrações Administrativas']},
+  {d:70,w:10,type:'sim',mat:'Simulado OAB 39'},
+  {d:71,w:11,type:'study',mat:'Consumidor',topics:['Práticas Comerciais','Defesa do Consumidor em Juízo']},
+  {d:72,w:11,type:'study',mat:'Penal',topics:['Legislação Penal Especial']},
+  {d:73,w:11,type:'study',mat:'Processo Penal',topics:['Competência — aprofundamento','Inquérito — aprofundamento']},
+  {d:74,w:11,type:'study',mat:'Administrativo',topics:['Consórcios Públicos','Atos Administrativos — aprofundamento']},
+  {d:75,w:11,type:'study',mat:'Civil',topics:['Família e Direitos Reais — aprofundamento']},
+  {d:76,w:11,type:'study',mat:'Processo do Trabalho',topics:['Ações Especiais','Recursos — aprofundamento']},
+  {d:77,w:11,type:'study',mat:'Tributário',topics:['Temas integradores — Tributário']},
+  {d:78,w:12,type:'sim',mat:'Simulado OAB 40'},
+  {d:79,w:12,type:'rev',mat:'Revisão Geral — Constitucional + Ética'},
+  {d:80,w:12,type:'rev',mat:'Revisão Geral — Civil + Empresarial'},
+  {d:81,w:12,type:'rev',mat:'Revisão Geral — Penal + Administrativo'},
+  {d:82,w:12,type:'rev',mat:'Revisão Geral — Tributário + Trabalho'},
+  {d:83,w:12,type:'rev',mat:'Revisão Geral — Proc. Civil + Proc. Penal'},
+  {d:84,w:12,type:'rev',mat:'Revisão Geral — Proc. Trabalho + Previdenciário + Extras'},
+  {d:85,w:13,type:'rev',mat:'Revisão Geral — Eleitoral + ECA + Consumidor'},
+  {d:86,w:13,type:'sim',mat:'Simulado Inédito 01'},
+  {d:87,w:13,type:'sim',mat:'Simulado OAB 41'},
+  {d:88,w:13,type:'sim',mat:'Simulado OAB 42'},
+  {d:89,w:13,type:'noc',mat:'Revisão Nocaute — Constitucional + Civil'},
+  {d:90,w:13,type:'noc',mat:'Revisão Nocaute — Penal + Tributário'},
+  {d:91,w:14,type:'noc',mat:'Revisão Nocaute — Trabalho + Administrativo'},
+  {d:92,w:14,type:'noc',mat:'Revisão Nocaute — Proc. Civil + Proc. Penal'},
+  {d:93,w:14,type:'noc',mat:'Revisão Nocaute — Proc. Trabalho + Ética + Empresarial'},
+  {d:94,w:14,type:'sim',mat:'Simulado OAB 43'},
+  {d:95,w:14,type:'noc',mat:'Nocaute — Pontos Fracos nos Simulados I'},
+  {d:96,w:14,type:'sim',mat:'Simulado OAB 44'},
+  {d:97,w:15,type:'noc',mat:'Nocaute — Pontos Fracos nos Simulados II'},
+  {d:98,w:15,type:'noc',mat:'Revisão Nocaute — Extras: Prev + Eleit + ECA + Cons'},
+  {d:99,w:15,type:'sim',mat:'Simulado OAB 45'},
+  {d:100,w:15,type:'noc',mat:'Nocaute — Pontos Fracos nos Simulados III'},
+  {d:101,w:15,type:'noc',mat:'Revisão Final — Constitucional + Penal'},
+  {d:102,w:15,type:'noc',mat:'Revisão Final — Civil + Tributário'},
+  {d:103,w:16,type:'sim',mat:'Simulado OAB 46'},
+  {d:104,w:16,type:'noc',mat:'Revisão Final — Trabalho + Administrativo'},
+  {d:105,w:16,type:'noc',mat:'Revisão Final — Proc. Civil + Proc. Penal'},
+  {d:106,w:16,type:'sim',mat:'Simulado Inédito 02'},
+  {d:107,w:16,type:'noc',mat:'Revisão Final — Proc. Trabalho + Ética + Empresarial'},
+  {d:108,w:16,type:'noc',mat:'Revisão Final — Extras + Pontos Fracos'},
+  {d:109,w:17,type:'noc',mat:'Nocaute — Últimas questões erradas'},
+  {d:110,w:17,type:'noc',mat:'Revisão Leve — Constitucional + Civil'},
+  {d:111,w:17,type:'noc',mat:'Revisão Leve — Penal + Tributário + Administrativo'},
+  {d:112,w:17,type:'noc',mat:'Revisão Leve — Trabalho + Proc. + Ética'},
+  {d:113,w:17,type:'noc',mat:'Revisão Leve — Extras + Pontos-chave gerais'},
+  {d:114,w:17,type:'noc',mat:'Véspera — Leitura leve, confiança e descanso'},
+  {d:115,w:17,type:'prova',mat:'PROVA OAB 47 — DIA DA APROVAÇÃO!'},
+];
+
+// Build state keys
+const ST = {};
+DAYS.forEach(day => {
+  if (day.type === 'study') {
+    ST[`${day.d}-estudo`] = false;
+    [1,3,7,14,30].forEach(r => { ST[`${day.d}-r${r}`] = false; });
+  } else if (day.type === 'sim') {
+    ST[`${day.d}-realizar`] = false;
+    ST[`${day.d}-gabarito`] = false;
+  } else {
+    ST[`${day.d}-ok`] = false;
+  }
+});
+
+try {
+  const s = localStorage.getItem('oab47_115');
+  if (s) Object.assign(ST, JSON.parse(s));
+} catch(e) {}
+
+function save() {
+  try { localStorage.setItem('oab47_115', JSON.stringify(ST)); } catch(e) {}
+}
+
+function updateProgress() {
+  const total = Object.keys(ST).length;
+  const done = Object.values(ST).filter(Boolean).length;
+  const pct = total ? Math.round(done / total * 100) : 0;
+  document.getElementById('pb').style.width = pct + '%';
+  document.getElementById('pl').textContent = `${done} / ${total} concluídos (${pct}%)`;
+}
+
+let curW = 0;
+function setWeek(w, el) {
+  curW = w;
+  document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+  render();
+}
+
+function buildCtrls() {
+  const c = document.getElementById('ctrls');
+  const b0 = document.createElement('button');
+  b0.className = 'fbtn on'; b0.textContent = 'Todas as semanas';
+  b0.onclick = () => setWeek(0, b0); c.appendChild(b0);
+  const weeks = [...new Set(DAYS.map(d => d.w))];
+  weeks.forEach(w => {
+    const b = document.createElement('button');
+    b.className = 'fbtn'; b.textContent = `Semana ${w}`;
+    b.onclick = () => setWeek(w, b); c.appendChild(b);
+  });
+}
+
+function makeItem(key, label, color) {
+  const li = document.createElement('li');
+  li.className = 'item';
+  li.setAttribute('data-key', key);
+  li.innerHTML = `<div class="cb${ST[key] ? ' chk' : ''}"></div><span class="${color ? 'rev-itxt' : 'itxt'}" ${color ? `style="color:${color};font-weight:600"` : ''}>${label}</span>`;
+  li.addEventListener('click', function() {
+    const k = this.getAttribute('data-key');
+    ST[k] = !ST[k];
+    this.querySelector('.cb').classList.toggle('chk', ST[k]);
+    save(); updateProgress();
+    // check if parent card fully done
+    const card = this.closest('.dcard');
+    const keys = [...card.querySelectorAll('[data-key]')].map(el => el.getAttribute('data-key'));
+    card.classList.toggle('done', keys.every(k => ST[k]));
+  });
+  return li;
+}
+
+function render() {
+  const weeks = [...new Set(DAYS.map(d => d.w))];
+  const wc = document.getElementById('wc'); wc.innerHTML = '';
+  weeks.forEach(w => {
+    if (curW !== 0 && curW !== w) return;
+    const days = DAYS.filter(d => d.w === w);
+    const wb = document.createElement('div'); wb.className = 'wblk';
+    wb.innerHTML = `<div class="wtitle">Semana ${w} &mdash; ${dayDate(days[0].d)} a ${dayDate(days[days.length-1].d)}</div>`;
+    const grid = document.createElement('div'); grid.className = 'dgrid';
+
+    days.forEach(day => {
+      const card = document.createElement('div'); card.className = 'dcard';
+
+      const dhead = `<div class="dhead"><span class="dnum">Dia ${day.d}</span><span class="ddate">${dayDate(day.d)}</span></div>`;
+
+      if (day.type === 'study') {
+        const allKeys = [`${day.d}-estudo`, ...[1,3,7,14,30].map(r => `${day.d}-r${r}`)];
+        if (allKeys.every(k => ST[k])) card.classList.add('done');
+
+        card.innerHTML = dhead + `<div class="dsubj">${day.mat}</div><div class="sec-lbl">Conteúdo</div><ul class="items" id="items-${day.d}"></ul><div class="divider"></div><div class="sec-lbl">Revisões programadas</div><ul class="items" id="revs-${day.d}"></ul>`;
+
+        const itemsList = card.querySelector(`#items-${day.d}`);
+        day.topics.forEach(t => itemsList.appendChild(makeItem(`${day.d}-estudo`, t, null)));
+
+        const revsList = card.querySelector(`#revs-${day.d}`);
+        [1,3,7,14,30].forEach(r => {
+          const li = makeItem(`${day.d}-r${r}`, `${REV_LABELS[r]} — ${addDays(day.d, r)}`, REV_COLORS[r]);
+          revsList.appendChild(li);
+        });
+
+      } else if (day.type === 'sim') {
+        const keys = [`${day.d}-realizar`, `${day.d}-gabarito`];
+        if (keys.every(k => ST[k])) card.classList.add('done');
+        card.innerHTML = dhead + `<span class="tag-sim">🎯 Simulado</span><div class="dsubj">${day.mat}</div><ul class="items" id="sim-${day.d}"></ul>`;
+        const ul = card.querySelector(`#sim-${day.d}`);
+        ul.appendChild(makeItem(`${day.d}-realizar`, 'Realizar o simulado', null));
+        ul.appendChild(makeItem(`${day.d}-gabarito`, 'Revisar gabarito e pontos fracos', null));
+
+      } else if (day.type === 'prova') {
+        card.innerHTML = dhead + `<span class="tag-prova">🏆 Prova</span><div class="dsubj">${day.mat}</div>`;
+        card.style.borderColor = '#7F77DD';
+
+      } else {
+        const tagClass = day.type === 'noc' ? 'tag-noc' : 'tag-rev';
+        const tagLabel = day.type === 'noc' ? '🔥 Nocaute' : '📋 Revisão';
+        if (ST[`${day.d}-ok`]) card.classList.add('done');
+        card.innerHTML = dhead + `<span class="${tagClass}">${tagLabel}</span><div class="dsubj">${day.mat}</div><ul class="items" id="rl-${day.d}"></ul>`;
+        const ul = card.querySelector(`#rl-${day.d}`);
+        ul.appendChild(makeItem(`${day.d}-ok`, 'Concluído', null));
+      }
+
+      grid.appendChild(card);
+    });
+
+    wb.appendChild(grid); wc.appendChild(wb);
+  });
+}
+
+buildCtrls(); render(); updateProgress();
+</script>
+</body>
+</html>

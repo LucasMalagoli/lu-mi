@@ -135,3 +135,36 @@ class CategoryBudgetCreate(SQLModel):
     category_id: int
     month: date
     planned_value: float
+
+
+class CronogramaDay(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    day_number: int = Field(index=True)
+    week_number: int
+    type: str  # study | sim | rev | noc | prova
+    mat: str
+    study_date: Optional[date] = None
+
+    topics: List["CronogramaTopic"] = Relationship(back_populates="day")
+    checks: List["CronogramaCheck"] = Relationship(back_populates="day")
+
+
+class CronogramaTopic(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    day_id: int = Field(foreign_key="cronogramaday.id")
+    label: str
+    order: int = 0
+
+    day: Optional[CronogramaDay] = Relationship(back_populates="topics")
+
+
+class CronogramaCheck(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    day_id: int = Field(foreign_key="cronogramaday.id")
+    key: str
+    label: str
+    color: Optional[str] = None
+    is_checked: bool = False
+    order: int = 0
+
+    day: Optional[CronogramaDay] = Relationship(back_populates="checks")
