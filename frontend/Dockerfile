@@ -1,12 +1,14 @@
 FROM node:22-alpine AS builder
 
+ENV CI=true
+
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN npm install -g pnpm@11.1.2 --quiet && pnpm install --frozen-lockfile
+RUN npm install -g pnpm@11.1.2 --quiet && pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
 
 COPY . .
-RUN pnpm build
+RUN node_modules/.bin/tsc -b && node_modules/.bin/vite build
 
 
 FROM nginx:alpine
