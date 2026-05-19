@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom'
 import { NotificationProvider } from "./context/NotificationContext"
 import { router } from './app/router'
 import './index.css'
+import './lib/fetchInterceptor'
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
