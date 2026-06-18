@@ -54,6 +54,13 @@ const REV_OFFSETS = [
   { key: 'r30', label: '30 dias', color: '#84cc16' },
 ]
 
+const REV_KEY_OFFSETS: Record<string, number> = { r1: 1, r3: 3, r7: 7, r14: 14, r30: 30 }
+
+function getToday(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function fmtDate(iso: string | null) {
   if (!iso) return ''
   const [, m, d] = iso.split('-')
@@ -219,6 +226,106 @@ function DayFormFields({
 
 const BLANK_FORM: DayForm = { type: 'study', mat: '', study_date: '', day_number: '', week_number: '', topics: [''] }
 
+function TodayDashboard({ days, today, onScrollToDay }: {
+  days: Day[]
+  today: string
+  onScrollToDay: (dayId: number) => void
+}) {
+  const todayMMDD = today.slice(5)
+
+  const studyItems = days
+    .filter(d => d.study_date?.slice(5) === todayMMDD && d.type === 'study')
+    .map(d => ({
+      dayId: d.id,
+      label: d.mat,
+      dayNum: d.day_number,
+      pending: d.checks.filter(c => c.key === 'estudo' && !c.is_checked).length,
+      total: d.checks.filter(c => c.key === 'estudo').length,
+    }))
+
+  const revItems = days.flatMap(d => {
+    if (!d.study_date) return []
+    return d.checks
+      .filter(c => {
+        if (c.is_checked) return false
+        const offset = REV_KEY_OFFSETS[c.key]
+        if (offset !== undefined) return addDays(d.study_date!, offset).slice(5) === todayMMDD
+        if (c.key.startsWith('extra_')) return c.key.slice(6) === today
+        return false
+      })
+      .map(c => ({
+        dayId: d.id,
+        cardLabel: d.mat,
+        dayNum: d.day_number,
+        checkLabel: c.label,
+        color: c.color,
+      }))
+  })
+
+  const isEmpty = studyItems.length === 0 && revItems.length === 0
+
+  return (
+    <div className="bg-slate-900/40 border-b border-slate-800 px-4 md:px-8 py-3">
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+        Hoje — {fmtDate(today)}
+      </p>
+      {isEmpty ? (
+        <p className="text-xs text-slate-600 italic">Nada programado para hoje.</p>
+      ) : (
+        <div className="flex flex-wrap gap-4">
+          {studyItems.length > 0 && (
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-blue-400 mb-1.5 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                Estudos ({studyItems.reduce((s, i) => s + (i.total - i.pending), 0)}/{studyItems.reduce((s, i) => s + i.total, 0)})
+              </p>
+              <div className="space-y-1">
+                {studyItems.map(item => (
+                  <button
+                    key={item.dayId}
+                    onClick={() => onScrollToDay(item.dayId)}
+                    className="flex items-center gap-1.5 text-xs text-left group"
+                  >
+                    <span className={`leading-snug group-hover:text-blue-300 transition-colors ${item.pending === 0 ? 'text-slate-600 line-through' : 'text-slate-300'}`}>
+                      Dia {item.dayNum} — {item.label}
+                    </span>
+                    {item.total > 0 && (
+                      <span className="text-slate-600 text-[10px]">({item.total - item.pending}/{item.total})</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {revItems.length > 0 && (
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-violet-400 mb-1.5 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-violet-500 flex-shrink-0" />
+                Revisões ({revItems.length})
+              </p>
+              <div className="space-y-1">
+                {revItems.map((item, i) => (
+                  <button
+                    key={i}
+                    onClick={() => onScrollToDay(item.dayId)}
+                    className="flex items-center gap-1.5 text-xs text-left group"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: item.color ?? '#8b5cf6' }} />
+                    <span className="text-slate-300 group-hover:text-violet-300 transition-colors leading-snug">
+                      Dia {item.dayNum} — {item.cardLabel}
+                    </span>
+                    <span className="text-slate-600 text-[10px]">({item.checkLabel.split('—')[0].trim()})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Cronograma() {
   const navigate = useNavigate()
   const { notify } = useNotify()
@@ -226,6 +333,7 @@ export default function Cronograma() {
   const [isLoading, setIsLoading] = useState(true)
   const [isImporting, setIsImporting] = useState(false)
   const [curWeek, setCurWeek] = useState(0)
+  const [scrollTarget, setScrollTarget] = useState<number | null>(null)
 
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState<DayForm>(BLANK_FORM)
@@ -234,12 +342,24 @@ export default function Cronograma() {
   const [editForm, setEditForm] = useState<DayForm>(BLANK_FORM)
 
   const token = () => localStorage.getItem("access_token")
+  const today = getToday()
 
   useEffect(() => { fetchDays() }, [])
+
+  useEffect(() => {
+    if (scrollTarget === null) return
+    const el = document.getElementById(`day-card-${scrollTarget}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setScrollTarget(null)
+  }, [scrollTarget])
 
   const fetchDays = async () => {
     setIsLoading(true)
     try {
+      await fetch(`${config.API_URL}/cronograma/migrate-per-topic-checks`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token()}` }
+      })
       const res = await fetch(`${config.API_URL}/cronograma/days`, {
         headers: { Authorization: `Bearer ${token()}` }
       })
@@ -250,6 +370,11 @@ export default function Cronograma() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const scrollToDay = (dayId: number) => {
+    setCurWeek(0)
+    setScrollTarget(dayId)
   }
 
   const handleToggle = async (checkId: number) => {
@@ -269,6 +394,35 @@ export default function Cronograma() {
         checks: d.checks.map(c => c.id === checkId ? { ...c, is_checked: !c.is_checked } : c)
       })))
       notify("Erro ao atualizar", "error")
+    }
+  }
+
+  const handleAddExtraCheck = async (dayId: number, date: string) => {
+    try {
+      const res = await fetch(`${config.API_URL}/cronograma/days/${dayId}/extra-checks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+        body: JSON.stringify({ date })
+      })
+      if (!res.ok) throw new Error()
+      const updated: Day = await res.json()
+      setDays(prev => sortDays(prev.map(d => d.id === updated.id ? updated : d)))
+    } catch {
+      notify("Erro ao adicionar revisão", "error")
+    }
+  }
+
+  const handleDeleteCheck = async (checkId: number) => {
+    try {
+      const res = await fetch(`${config.API_URL}/cronograma/checks/${checkId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token()}` }
+      })
+      if (!res.ok) throw new Error()
+      const updated: Day = await res.json()
+      setDays(prev => sortDays(prev.map(d => d.id === updated.id ? updated : d)))
+    } catch {
+      notify("Erro ao remover revisão", "error")
     }
   }
 
@@ -427,6 +581,7 @@ export default function Cronograma() {
           { color: '#BA7517', label: 'Revisão 7 dias' },
           { color: '#1D9E75', label: 'Revisão 14 dias' },
           { color: '#378ADD', label: 'Revisão 30 dias' },
+          { color: '#8b5cf6', label: 'Revisão extra' },
           { color: '#D4537E', label: 'Simulado' },
         ].map(l => (
           <div key={l.label} className="flex items-center gap-1.5">
@@ -435,6 +590,11 @@ export default function Cronograma() {
           </div>
         ))}
       </div>
+
+      {/* Today dashboard */}
+      {days.length > 0 && (
+        <TodayDashboard days={days} today={today} onScrollToDay={scrollToDay} />
+      )}
 
       {/* Week filter */}
       <div className="sticky top-0 z-10 bg-slate-950/95 backdrop-blur border-b border-slate-800 px-4 md:px-8 py-2 flex gap-2 flex-wrap">
@@ -475,9 +635,12 @@ export default function Cronograma() {
                       key={day.id}
                       day={day}
                       isDone={isDone(day)}
+                      today={today}
                       onToggle={handleToggle}
                       onDelete={handleDeleteDay}
                       onEdit={openEdit}
+                      onAddExtraCheck={handleAddExtraCheck}
+                      onDeleteCheck={handleDeleteCheck}
                     />
                   ))}
                 </div>
@@ -529,14 +692,20 @@ function Modal({ title, children }: { title: string; children: React.ReactNode; 
   )
 }
 
-function DayCard({ day, isDone, onToggle, onDelete, onEdit }: {
+function DayCard({ day, isDone, today, onToggle, onDelete, onEdit, onAddExtraCheck, onDeleteCheck }: {
   day: Day
   isDone: boolean
+  today: string
   onToggle: (id: number) => void
   onDelete: (id: number) => void
   onEdit: (day: Day) => void
+  onAddExtraCheck: (dayId: number, date: string) => void
+  onDeleteCheck: (checkId: number) => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const [addingRev, setAddingRev] = useState(false)
+  const [extraRevDate, setExtraRevDate] = useState(today)
+
   const estudoChecks = day.checks.filter(c => c.key === 'estudo').sort((a, b) => a.order - b.order)
   const revChecks = day.checks.filter(c => c.key !== 'estudo')
   const sortedTopics = [...day.topics].sort((a, b) => a.order - b.order)
@@ -545,8 +714,16 @@ function DayCard({ day, isDone, onToggle, onDelete, onEdit }: {
     ? 'border-violet-500/60'
     : isDone ? 'border-slate-700/50' : 'border-slate-800'
 
+  const handleAddRev = () => {
+    if (!extraRevDate) return
+    onAddExtraCheck(day.id, extraRevDate)
+    setAddingRev(false)
+    setExtraRevDate(today)
+  }
+
   return (
     <div
+      id={`day-card-${day.id}`}
       className={`bg-slate-900/50 border rounded-xl p-4 transition-all ${cardBorder} ${isDone ? 'opacity-60' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -594,18 +771,49 @@ function DayCard({ day, isDone, onToggle, onDelete, onEdit }: {
               )
             })}
           </ul>
-          {revChecks.length > 0 && (
+          {(revChecks.length > 0 || day.type === 'study') && (
             <>
               <div className="border-t border-slate-800 my-2" />
               <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Revisões programadas</p>
-              <ul className="space-y-1.5">
-                {revChecks.map(c => (
-                  <li key={c.id} className="flex items-start gap-2 cursor-pointer" onClick={() => onToggle(c.id)}>
-                    <Checkbox checked={c.is_checked} color={c.color} onClick={() => onToggle(c.id)} />
-                    <span className="text-xs leading-snug" style={{ color: c.is_checked ? '#475569' : (c.color ?? '#94a3b8') }}>{c.label}</span>
-                  </li>
-                ))}
-              </ul>
+              {revChecks.length > 0 && (
+                <ul className="space-y-1.5 mb-2">
+                  {revChecks.map(c => (
+                    <li key={c.id} className="flex items-start gap-2 cursor-pointer group/rev" onClick={() => onToggle(c.id)}>
+                      <Checkbox checked={c.is_checked} color={c.color} onClick={() => onToggle(c.id)} />
+                      <span className="flex-1 text-xs leading-snug" style={{ color: c.is_checked ? '#475569' : (c.color ?? '#94a3b8') }}>{c.label}</span>
+                      {c.key.startsWith('extra_') && (
+                        <button
+                          onClick={e => { e.stopPropagation(); onDeleteCheck(c.id) }}
+                          className="opacity-0 group-hover/rev:opacity-100 text-slate-700 hover:text-red-500 transition-all flex-shrink-0 mt-0.5"
+                          title="Remover revisão extra"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {addingRev ? (
+                <div className="flex items-center gap-1.5 mt-1" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="date"
+                    value={extraRevDate}
+                    onChange={e => setExtraRevDate(e.target.value)}
+                    className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-violet-500 [color-scheme:dark]"
+                    autoFocus
+                  />
+                  <button onClick={handleAddRev} className="text-xs px-2 py-1 bg-violet-700 hover:bg-violet-600 text-white rounded transition-colors flex-shrink-0">Ok</button>
+                  <button onClick={() => setAddingRev(false)} className="text-xs text-slate-500 hover:text-slate-300 transition-colors flex-shrink-0">✕</button>
+                </div>
+              ) : (
+                <button
+                  onClick={e => { e.stopPropagation(); setAddingRev(true) }}
+                  className="text-xs text-slate-600 hover:text-violet-400 transition-colors"
+                >
+                  + revisão extra
+                </button>
+              )}
             </>
           )}
         </>

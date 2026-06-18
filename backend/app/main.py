@@ -736,9 +736,12 @@ async def create_cronograma_day(
     user: User = Depends(get_current_user_obj),
     session: AsyncSession = Depends(get_session),
 ):
+    week_number = data.week_number
+    if data.study_date is not None:
+        week_number = max(1, (data.study_date - _CRONOGRAMA_START).days // 7 + 1)
     day = CronogramaDay(
         day_number=data.day_number,
-        week_number=data.week_number,
+        week_number=week_number,
         type=data.type,
         mat=data.mat,
         study_date=data.study_date,
@@ -756,6 +759,43 @@ async def create_cronograma_day(
     await session.commit()
     return await _load_day(session, day.id)
 
+
+class CronogramaExtraCheckCreate(BaseModel):
+    date: date
+
+
+@app.post("/cronograma/days/{day_id}/extra-checks", response_model=CronogramaDayRead, status_code=201)
+async def add_extra_check(
+    day_id: int,
+    data: CronogramaExtraCheckCreate,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    day = (await session.execute(select(CronogramaDay).where(CronogramaDay.id == day_id))).scalars().first()
+    if not day:
+        raise HTTPException(status_code=404)
+    existing = (await session.execute(select(CronogramaCheck).where(CronogramaCheck.day_id == day_id))).scalars().all()
+    max_order = max((c.order for c in existing), default=-1) + 1
+    key = f"extra_{data.date.isoformat()}"
+    label = f"Revisão extra — {data.date.strftime('%d/%m')}"
+    session.add(CronogramaCheck(day_id=day_id, key=key, label=label, color='#8b5cf6', order=max_order, is_checked=False))
+    await session.commit()
+    return await _load_day(session, day_id)
+
+
+@app.delete("/cronograma/checks/{check_id}", response_model=CronogramaDayRead)
+async def delete_cronograma_check(
+    check_id: int,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    check = (await session.execute(select(CronogramaCheck).where(CronogramaCheck.id == check_id))).scalars().first()
+    if not check:
+        raise HTTPException(status_code=404)
+    day_id = check.day_id
+    await session.delete(check)
+    await session.commit()
+    return await _load_day(session, day_id)
 
 @app.delete("/cronograma/days/{day_id}")
 async def delete_cronograma_day(
