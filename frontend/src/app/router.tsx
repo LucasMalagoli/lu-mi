@@ -10,6 +10,7 @@ import AppLayout from '../components/layout/AppLayout'
 import ProtectedRoute from '../routes/ProtectedRoute'
 import Orcamento from '../pages/Orcamento'
 import Cronograma from '../pages/Cronograma'
+import BuscarVagas from '../pages/BuscarVagas'
 
 export const router = createBrowserRouter([
   {
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
           { path: '/financeiro', element: <PlanejamentoFinanceiro /> },
           { path: '/configuracoes', element: <Settings /> },
           { path: '/cronograma', element: <Cronograma /> },
+          { path: '/vagas', element: <BuscarVagas /> },
         ],
       },
     ],

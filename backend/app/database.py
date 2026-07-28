@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from sqlmodel import SQLModel
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -21,6 +22,17 @@ async def init_db():
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    async_session = sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    async with async_session() as session:
+        yield session
+
+
+@asynccontextmanager
+async def session_scope() -> AsyncGenerator[AsyncSession, None]:
+    """Standalone session for code that runs outside the request lifecycle
+    (e.g. asyncio background tasks), where Depends(get_session) isn't available."""
     async_session = sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )

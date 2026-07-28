@@ -1,5 +1,8 @@
+import asyncio
+import json
 import logging
 import calendar
+from pathlib import Path
 from datetime import datetime, date, timedelta
 from typing import Optional, List
 
@@ -22,16 +25,40 @@ from .models import (
     FinancialRecordStatus, FinancialRecordCategoryLink,
     CategoryBudget, CategoryBudgetCreate, CategoryCreate,
     CronogramaDay, CronogramaTopic, CronogramaCheck,
+    Company, CompanyCreate, CompanyRead, UserCompanyInterest,
+    SearchHistory, SearchHistoryRead, JobListing, JobListingRead,
+    SearchStatusRead, SearchRequest, SearchKickoffRead,
+    SuggestTermsRequest, SuggestTermsRead,
 )
-from .database import init_db, get_session
+from .database import init_db, get_session, session_scope
+from . import jobsearch
+from . import ai_terms
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+_COMPANIES_SEED_PATH = Path(__file__).parent / "data" / "companies_seed.json"
+
+
+async def _seed_companies(session: AsyncSession):
+    with open(_COMPANIES_SEED_PATH, encoding="utf-8") as f:
+        names = json.load(f)
+    existing = set((await session.execute(select(Company.name))).scalars().all())
+    added = 0
+    for name in names:
+        if name in existing:
+            continue
+        session.add(Company(name=name))
+        added += 1
+    if added:
+        await session.commit()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    async with session_scope() as session:
+        await _seed_companies(session)
     yield
 
 
@@ -967,3 +994,237 @@ async def update_cronograma_day(
 
     await session.commit()
     return await _load_day(session, day.id)
+
+
+# ── Buscar Vagas ────────────────────────────────────────────────────────────────
+
+def _company_read(company: Company, interesse: bool) -> CompanyRead:
+    return CompanyRead(
+        id=company.id,
+        name=company.name,
+        gupy_slug=company.gupy_slug,
+        gupy_confirmed_at=company.gupy_confirmed_at,
+        inhire_slug=company.inhire_slug,
+        inhire_confirmed_at=company.inhire_confirmed_at,
+        interesse=interesse,
+    )
+
+
+@app.get("/vagas/empresas", response_model=List[CompanyRead])
+async def list_companies(
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    companies = (await session.execute(select(Company).order_by(Company.name))).scalars().all()
+    interest_ids = set((await session.execute(
+        select(UserCompanyInterest.company_id).where(UserCompanyInterest.user_id == user.id)
+    )).scalars().all())
+    return [_company_read(c, c.id in interest_ids) for c in companies]
+
+
+@app.post("/vagas/empresas", response_model=CompanyRead, status_code=201)
+async def create_company(
+    data: CompanyCreate,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Nome inválido")
+
+    statement = select(Company).where(Company.name == name)
+    company = (await session.execute(statement)).scalars().first()
+    if not company:
+        try:
+            company = Company(name=name)
+            session.add(company)
+            await session.commit()
+            await session.refresh(company)
+        except IntegrityError:
+            await session.rollback()
+            company = (await session.execute(statement)).scalars().first()
+            if not company:
+                raise HTTPException(status_code=500, detail="Failed to create or retrieve company")
+    return _company_read(company, False)
+
+
+@app.post("/vagas/empresas/{company_id}/interesse")
+async def toggle_company_interest(
+    company_id: int,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    company = (await session.execute(select(Company).where(Company.id == company_id))).scalars().first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
+    statement = select(UserCompanyInterest).where(
+        UserCompanyInterest.user_id == user.id, UserCompanyInterest.company_id == company_id
+    )
+    existing = (await session.execute(statement)).scalars().first()
+    if existing:
+        await session.delete(existing)
+        await session.commit()
+        return {"interesse": False}
+
+    try:
+        session.add(UserCompanyInterest(user_id=user.id, company_id=company_id))
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+    return {"interesse": True}
+
+
+@app.post("/vagas/empresas/{company_id}/verificar", response_model=CompanyRead)
+async def verify_company_presence(
+    company_id: int,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    company = (await session.execute(select(Company).where(Company.id == company_id))).scalars().first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
+    gupy_slug, inhire_slug = await asyncio.gather(
+        jobsearch.probe_gupy_presence(company.name),
+        jobsearch.probe_inhire_presence(company.name),
+    )
+    now = datetime.now()
+    if gupy_slug:
+        company.gupy_slug = gupy_slug
+        company.gupy_confirmed_at = now
+    if inhire_slug:
+        company.inhire_slug = inhire_slug
+        company.inhire_confirmed_at = now
+    session.add(company)
+    await session.commit()
+    await session.refresh(company)
+
+    interest = (await session.execute(select(UserCompanyInterest).where(
+        UserCompanyInterest.user_id == user.id, UserCompanyInterest.company_id == company_id
+    ))).scalars().first()
+    return _company_read(company, bool(interest))
+
+
+@app.post("/vagas/sugerir-termos", response_model=SuggestTermsRead)
+async def suggest_search_terms(
+    data: SuggestTermsRequest,
+    user: User = Depends(get_current_user_obj),
+):
+    cargo = data.cargo.strip()
+    if not cargo:
+        raise HTTPException(status_code=400, detail="Informe o cargo desejado")
+    try:
+        terms = await ai_terms.suggest_terms(cargo)
+    except ai_terms.AiNotConfiguredError:
+        raise HTTPException(
+            status_code=400,
+            detail="Sugestão por IA não configurada. Adicione OPENROUTER_API_KEY no .env do backend.",
+        )
+    except ai_terms.AiSuggestionError:
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível obter sugestões agora — tente novamente ou digite os termos manualmente.",
+        )
+    return SuggestTermsRead(terms=terms)
+
+
+@app.post("/vagas/buscar", response_model=SearchKickoffRead, status_code=201)
+async def start_job_search(
+    data: SearchRequest,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    terms = [t.strip() for t in data.terms if t.strip()]
+    if not terms:
+        raise HTTPException(status_code=400, detail="Informe ao menos um termo de busca")
+
+    companies = (await session.execute(
+        select(Company).where(Company.id.in_(data.company_ids))
+    )).scalars().all()
+    if not companies:
+        raise HTTPException(status_code=400, detail="Selecione ao menos uma empresa")
+
+    total = sum(1 + (1 if c.inhire_slug else 0) for c in companies)
+    history = SearchHistory(
+        user_id=user.id,
+        terms=json.dumps(terms, ensure_ascii=False),
+        terms_signature=jobsearch.terms_signature(terms),
+        company_ids=json.dumps([c.id for c in companies]),
+        status="running",
+        total=total,
+        completed=0,
+    )
+    session.add(history)
+    await session.commit()
+    await session.refresh(history)
+
+    asyncio.create_task(jobsearch.run_search(history.id, terms, [c.id for c in companies]))
+
+    return SearchKickoffRead(search_id=history.id, total=total)
+
+
+async def _load_search_status(session: AsyncSession, search_id: int, user_id: int) -> SearchStatusRead:
+    history = (await session.execute(
+        select(SearchHistory).where(SearchHistory.id == search_id, SearchHistory.user_id == user_id)
+    )).scalars().first()
+    if not history:
+        raise HTTPException(status_code=404, detail="Busca não encontrada")
+
+    statement = (
+        select(JobListing, Company.name)
+        .join(Company, JobListing.company_id == Company.id)
+        .where(JobListing.search_id == search_id)
+        .order_by(JobListing.fetched_at)
+    )
+    rows = (await session.execute(statement)).all()
+    jobs = [
+        JobListingRead(
+            id=job.id, company_id=job.company_id, company_name=company_name, platform=job.platform,
+            title=job.title, url=job.url, location=job.location, workplace_type=job.workplace_type,
+            published_date=job.published_date, fetched_at=job.fetched_at,
+        )
+        for job, company_name in rows
+    ]
+    return SearchStatusRead(id=history.id, status=history.status, total=history.total, completed=history.completed, jobs=jobs)
+
+
+@app.get("/vagas/buscas/{search_id}/status", response_model=SearchStatusRead)
+async def get_search_status(
+    search_id: int,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    return await _load_search_status(session, search_id, user.id)
+
+
+@app.get("/vagas/buscas/{search_id}", response_model=SearchStatusRead)
+async def get_search_snapshot(
+    search_id: int,
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    return await _load_search_status(session, search_id, user.id)
+
+
+@app.get("/vagas/buscas", response_model=List[SearchHistoryRead])
+async def list_searches(
+    user: User = Depends(get_current_user_obj),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = (
+        select(SearchHistory, func.count(JobListing.id))
+        .outerjoin(JobListing, JobListing.search_id == SearchHistory.id)
+        .where(SearchHistory.user_id == user.id)
+        .group_by(SearchHistory.id)
+        .order_by(desc(SearchHistory.created_at))
+    )
+    rows = (await session.execute(statement)).all()
+    return [
+        SearchHistoryRead(
+            id=history.id, terms=json.loads(history.terms), status=history.status,
+            total=history.total, completed=history.completed, created_at=history.created_at,
+            job_count=job_count,
+        )
+        for history, job_count in rows
+    ]

@@ -48,6 +48,13 @@ export default function Home() {
       )
     },
     {
+      title: "Buscar Vagas",
+      path: "/vagas",
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" /></svg>
+      )
+    },
+    {
       title: "Configurações",
       path: "/configuracoes",
       icon: (
