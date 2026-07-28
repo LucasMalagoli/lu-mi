@@ -52,6 +52,7 @@ export default function BuscarVagas() {
 
   const [isAddCompanyModalOpen, setIsAddCompanyModalOpen] = useState(false)
   const [newCompanyName, setNewCompanyName] = useState("")
+  const [verifyingIds, setVerifyingIds] = useState<Set<number>>(new Set())
 
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<Set<number>>(new Set())
   const [terms, setTerms] = useState<string[]>([])
@@ -125,12 +126,42 @@ export default function BuscarVagas() {
         body: JSON.stringify({ name: newCompanyName.trim() })
       })
       if (!res.ok) throw new Error("Failed to create company")
-      notify("Empresa adicionada!", "success")
+      const created = await res.json()
+      notify("Empresa adicionada! Verificando presença no Gupy/InHire...", "success")
       setIsAddCompanyModalOpen(false)
       setNewCompanyName("")
       fetchCompanies()
+      handleVerifyCompany(created.id)
     } catch {
       notify("Erro ao adicionar empresa", "error")
+    }
+  }
+
+  const handleVerifyCompany = async (companyId: number) => {
+    setVerifyingIds(prev => new Set(prev).add(companyId))
+    try {
+      const res = await fetch(`${config.API_URL}/vagas/empresas/${companyId}/verificar`, {
+        method: "POST",
+        headers: authHeaders()
+      })
+      if (!res.ok) throw new Error("Failed to verify company")
+      const updated = await res.json()
+      setCompanies(prev => prev.map(c => c.id === companyId ? updated : c))
+      const found = [updated.gupy_slug && "Gupy", updated.inhire_slug && "InHire"].filter(Boolean)
+      notify(
+        found.length > 0
+          ? `Presença confirmada: ${found.join(" e ")}.`
+          : "Nenhuma presença encontrada no Gupy/InHire para essa empresa. A busca no Gupy funciona mesmo assim (é global por nome); o InHire só funciona se essa presença for confirmada.",
+        found.length > 0 ? "success" : "info"
+      )
+    } catch {
+      notify("Erro ao verificar presença da empresa", "error")
+    } finally {
+      setVerifyingIds(prev => {
+        const next = new Set(prev)
+        next.delete(companyId)
+        return next
+      })
     }
   }
 
@@ -396,6 +427,8 @@ export default function BuscarVagas() {
                     selected={selectedCompanyIds.has(c.id)}
                     onToggleSelected={() => toggleSelected(c.id)}
                     onToggleInterest={() => handleToggleInterest(c.id)}
+                    onVerify={() => handleVerifyCompany(c.id)}
+                    isVerifying={verifyingIds.has(c.id)}
                   />
                 ))}
                 {otherCompanies.length > 0 && (
@@ -408,6 +441,8 @@ export default function BuscarVagas() {
                         selected={selectedCompanyIds.has(c.id)}
                         onToggleSelected={() => toggleSelected(c.id)}
                         onToggleInterest={() => handleToggleInterest(c.id)}
+                        onVerify={() => handleVerifyCompany(c.id)}
+                        isVerifying={verifyingIds.has(c.id)}
                       />
                     ))}
                     {otherCompaniesRemaining > 0 && (
@@ -427,7 +462,14 @@ export default function BuscarVagas() {
           {/* Search + results panel */}
           <div className="md:col-span-2 space-y-6">
             <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-              <h2 className="font-semibold text-white mb-3">Termos de busca</h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-white">Termos de busca</h2>
+                {terms.length > 0 && (
+                  <button onClick={() => setTerms([])} className="text-xs text-slate-500 hover:text-red-400 transition-colors">
+                    Limpar termos
+                  </button>
+                )}
+              </div>
               <div className="flex gap-2 mb-3">
                 <input
                   type="text"
@@ -653,11 +695,13 @@ export default function BuscarVagas() {
   )
 }
 
-function CompanyRow({ company, selected, onToggleSelected, onToggleInterest }: {
+function CompanyRow({ company, selected, onToggleSelected, onToggleInterest, onVerify, isVerifying }: {
   company: Company
   selected: boolean
   onToggleSelected: () => void
   onToggleInterest: () => void
+  onVerify: () => void
+  isVerifying: boolean
 }) {
   return (
     <div className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-800/50">
@@ -670,6 +714,16 @@ function CompanyRow({ company, selected, onToggleSelected, onToggleInterest }: {
       <span className="flex-1 text-sm text-slate-300 truncate" title={company.name}>{company.name}</span>
       {company.gupy_slug && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-200">G</span>}
       {company.inhire_slug && <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-900/50 text-teal-200">I</span>}
+      <button
+        onClick={onVerify}
+        disabled={isVerifying}
+        title="Verificar presença no Gupy/InHire"
+        className="text-slate-600 hover:text-slate-300 disabled:text-slate-700"
+      >
+        {isVerifying ? (
+          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-slate-400"></div>
+        ) : "🔄"}
+      </button>
       <button
         onClick={onToggleInterest}
         title={company.interesse ? "Remover interesse" : "Marcar interesse"}

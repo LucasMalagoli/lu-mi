@@ -296,8 +296,8 @@ async def run_search(search_id: int, terms: list[str], company_ids: list[int]):
                     completed += 1
                 else:
                     pending_inhire.append(company)
-            else:
-                completed += 1
+            # no inhire_slug => no InHire check to perform at all; `total` (computed at
+            # kickoff) already excludes this unit of work, so `completed` must too.
 
         await session.commit()
         await _bump_progress(session, search_id, completed)
